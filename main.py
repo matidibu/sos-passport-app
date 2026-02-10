@@ -18,8 +18,14 @@ destinos = {
     "Florianópolis, Brasil": {
         "consulado": "Calle de la Amistad 123",
         "telefono": "+55 48 1234-5678",
-        "mapa": "https://www.google.com/maps",
-        "codigo": "FLORIPA2026"
+        "mapa": "https://maps.app.goo.gl/N422pe89Qo484cZT9",
+        "codigo": "FLORIPA_SAFE" # <--- Cambialo acá
+    },
+    "Madrid, España": {
+        "consulado": "Calle Serrano 90",
+        "telefono": "+34 91 123 4567",
+        "mapa": "https://maps.app.goo.gl/MadridUbicacion",
+        "codigo": "MADRID_SAFE"
     }
 }
 
@@ -43,7 +49,10 @@ if destino_sel != "Seleccionar...":
         st.link_button("📍 Ver ubicación en el Mapa", datos["mapa"])
         
     elif codigo_input != "":
-        st.error("❌ Código inválido")
-        st.write("¿Aún no tenés tu acceso? Obtenelo al instante:")
-        # Aquí es donde pondrás tu link final de cobro
-        st.link_button("💳 Comprar acceso por $10 USD", "https://tu-link-de-pago.com")
+        st.error("❌ Código inválido o expirado")
+        st.write("Obtené tu código de acceso al instante aquí:")
+        
+        # Reemplaza el link entre comillas por tu link de Mercado Pago o PayPal
+        st.link_button("💳 Pagar Guía de Emergencia ($10 USD)", "https://mpago.la/TuLinkDePago")
+        
+        st.caption("Una vez realizado el pago, recibirás el código en tu email.")
