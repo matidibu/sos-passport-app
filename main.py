@@ -7,7 +7,19 @@ st.set_page_config(page_title="SOS Passport", page_icon="🆘", layout="centered
 st.markdown("""
     <style>
     .main { background-color: #f9f9f9; }
-    .stButton>button { width: 100%; border-radius: 10px; height: 3.5em; background-color: #FF4B4B; color: white; font-weight: bold; }
+    .stButton>button { 
+        width: 100%; 
+        border-radius: 10px; 
+        height: 3.5em; 
+        background-color: #FF4B4B; 
+        color: white; 
+        font-weight: bold; 
+        border: none;
+    }
+    .stButton>button:hover {
+        background-color: #D43F3F;
+        color: white;
+    }
     .stSelectbox label { font-weight: bold; color: #1E1E1E; }
     </style>
     """, unsafe_allow_html=True)
@@ -16,18 +28,19 @@ st.title("🆘 SOS Passport")
 st.markdown("### Tu seguridad no tiene fronteras.")
 st.divider()
 
-# --- 1. BASE DE DATOS REAL (Actualizada con links oficiales) ---
+# --- 1. BASE DE DATOS REAL (Links de Maps actualizados y robustos) ---
 destinos = {
     "Florianópolis, Brasil": {
         "consulado": "Rod. José Carlos Daux 5500, Torre Campeche, Sala 218, Saco Grande.",
         "telefono": "+55 48 3024-3035",
-        "mapa": "https://maps.app.goo.gl/35bYofm1HqR2N4kM6", 
+        # Link de búsqueda directa para evitar errores de Firebase
+        "mapa": "https://www.google.com/maps/search/?api=1&query=Consulado+Argentino+Florianopolis", 
         "codigo": "FLORIPA2026"
     },
     "Madrid, España": {
         "consulado": "Calle de Fernando el Santo 15, Chamberí, 28010 Madrid.",
         "telefono": "+34 914 02 51 15",
-        "mapa": "https://maps.app.goo.gl/K8P2G9mXmX6xYxYx9",
+        "mapa": "https://www.google.com/maps/search/?api=1&query=Consulado+Argentino+Madrid",
         "codigo": "MADRID2026"
     }
 }
@@ -52,15 +65,16 @@ if destino_sel != "Seleccionar...":
         with col2:
             st.warning(f"📞 **Teléfono:**\n\n{datos['telefono']}")
             
-        # BOTÓN DE MAPA ACTUALIZADO
+        # BOTÓN DE MAPA ACTUALIZADO (Formato Universal)
         st.link_button("📍 Abrir en Google Maps (GPS)", datos["mapa"])
         
     elif codigo_input != "":
         st.error("❌ Código inválido o expirado")
-        st.info("💡 **¿Necesitás un código?**\n\nComprá tu guía y recibí el código al instante.")
+        st.info("💡 **¿Necesitás un código?**\n\nAl comprar tu guía estratégica, recibís el código de acceso al instante.")
         
-        # Link de pago (Reemplazalo por el tuyo real de Mercado Pago)
-        st.link_button("💳 COMPRAR ACCESO ($10 USD)", "https://tu-link-de-pago-aqui.com")
+        # --- 2. TU LINK DE PAGO REAL ---
+        # Cambiá el link de abajo por tu link de Mercado Pago, PayPal o Stripe
+        st.link_button("💳 COMPRAR ACCESO ($10 USD)", "https://mpago.la/tu-link-aqui")
 
 st.divider()
-st.caption("SOS Passport © 2026")
+st.caption("SOS Passport © 2026 - Asistencia al viajero")
