@@ -5,7 +5,6 @@ import google.generativeai as genai
 st.set_page_config(page_title="SOS Passport AI", page_icon="🆘", layout="centered")
 
 # --- CONFIGURACIÓN DE IA ---
-# PEGA TU CLAVE ACÁ ADENTRO (Asegurate que empiece y termine con comillas)
 API_KEY = "AIzaSyBp_8YN50oicqeuBltOT-WHB2Fh2yWSuhg" 
 
 try:
