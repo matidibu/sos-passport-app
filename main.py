@@ -4,21 +4,21 @@ from google import genai
 # Configuración de la página
 st.set_page_config(page_title="SOS Passport AI", page_icon="🆘")
 
-# --- 1. CONFIGURACIÓN DE IA ---
-# Pegá tu clave ACÁ ADENTRO (asegurandote que no haya espacios)
-llave = "AIzaSyCvXXh2cLIMUgvhQmi2A67EyYw3yGOKCdl"
+# --- CONFIGURACIÓN DE IA ---
+# Usamos tu clave nueva recién generada
+API_KEY = "AIzaSyCvXXh2cLlMUgvhQmi2A67EyYw3yG0KCdI" 
 
 try:
-    client = genai.Client(api_key=llave)
-except:
+    client = genai.Client(api_key=API_KEY)
+except Exception as e:
     st.error("Error de conexión.")
 
-# --- 2. BASE DE DATOS ---
+# --- BASE DE DATOS ---
 destinos = {
     "Florianópolis, Brasil": {
         "consulado": "Rod. José Carlos Daux 5500, Torre Campeche, Sala 218.",
         "telefono": "+55 48 3024-3035",
-        "mapa": "https://www.google.com/maps/search/Consulado+Argentina+Florianopolis", 
+        "mapa": "https://maps.app.goo.gl/floripa", 
         "codigo": "FLORIPA2026"
     }
 }
@@ -33,21 +33,21 @@ if destino_sel != "Seleccionar...":
     if codigo_input == datos["codigo"]:
         st.success("✅ ACCESO CONCEDIDO")
         st.info(f"🏛️ **Consulado:** {datos['consulado']}")
-        st.link_button("🚀 Abrir Mapa", datos["mapa"])
         
         st.divider()
-        user_question = st.text_input("🤖 Chat de Ayuda:")
+        st.markdown("### 🤖 Asistente IA")
+        user_question = st.text_input("Preguntame lo que necesites:")
+        
         if user_question:
-            try:
-                # Usamos una forma más directa de respuesta
-                response = client.models.generate_content(
-                    model="gemini-1.5-flash", 
-                    contents=user_question
-                )
-                st.write(response.text)
-            except Exception as e:
-                # Esto nos va a decir el error REAL en la pantalla
-                st.error(f"Error técnico: {e}")
-
-    elif codigo_input != "":
-        st.error("❌ Código incorrecto")
+            with st.spinner("Consultando a la IA..."):
+                try:
+                    # Llamada limpia a la IA
+                    response = client.models.generate_content(
+                        model="gemini-1.5-flash", 
+                        contents=user_question
+                    )
+                    st.markdown("---")
+                    st.write(response.text)
+                except Exception as e:
+                    # Este mensaje nos dirá si el problema es la región o la clave
+                    st.error(f"Aviso técnico: {e}")
