@@ -5,18 +5,20 @@ from google import genai
 st.set_page_config(page_title="SOS Passport AI", page_icon="🆘")
 
 # --- CONFIGURACIÓN DE IA ---
-# PEGA TU CLAVE ACÁ (Asegurate que empiece con AIza...)
-API_KEY = 'AIzaSyBp_8YN50oicqeuBltOT-WHB2Fh2yWSuhg' 
+# LA CLAVE VA ACÁ ABAJO (Línea 9). Borrá todo lo que hay entre las comillas y pegá.
+API_KEY = 'AIzaSyBp_8YN50oicqeuBltOT-WHB2Fh2yWSuhg'
 
-# Inicializamos el cliente fuera para que sea más estable
-client = genai.Client(api_key=API_KEY)
+try:
+    client = genai.Client(api_key=API_KEY)
+except Exception as e:
+    st.error("Error al conectar con el servidor de IA.")
 
 # --- BASE DE DATOS ---
 destinos = {
     "Florianópolis, Brasil": {
         "consulado": "Rod. José Carlos Daux 5500, Torre Campeche, Sala 218.",
         "telefono": "+55 48 3024-3035",
-        "mapa": "https://www.google.com/maps/search/Consulado+Argentino+Florianopolis", 
+        "mapa": "https://www.google.com/maps/search/?api=1&query=Consulado+Argentino+Florianopolis", 
         "codigo": "FLORIPA2026"
     }
 }
@@ -26,7 +28,7 @@ destino_sel = st.selectbox("📍 Seleccioná destino", ["Seleccionar..."] + list
 
 if destino_sel != "Seleccionar...":
     datos = destinos[destino_sel]
-    codigo_input = st.text_input("🔑 Código", type="password")
+    codigo_input = st.text_input("🔑 Código de acceso", type="password")
 
     if codigo_input == datos["codigo"]:
         st.success("✅ ACCESO CONCEDIDO")
@@ -35,17 +37,16 @@ if destino_sel != "Seleccionar...":
         
         st.divider()
         st.markdown("### 🤖 Asistente IA")
-        user_question = st.text_input("Preguntame sobre seguridad o trámites:")
+        user_question = st.text_input("Preguntame algo (ej: ¿Dónde hay un hospital?):")
         
         if user_question:
             with st.spinner("Pensando..."):
                 try:
-                    # Formato correcto para la nueva librería google-genai
                     response = client.models.generate_content(
                         model="gemini-1.5-flash", 
                         contents=f"Usuario en {destino_sel}. Ayuda con: {user_question}"
                     )
-                    st.markdown("---")
+                    st.write("---")
                     st.write(response.text)
                 except Exception as e:
-                    st.error("Hubo un problema con la clave de IA. Verificá que sea válida.")
+                    st.error("La clave de IA sigue dando error. Verificá que sea la correcta en AI Studio.")
