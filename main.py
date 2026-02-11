@@ -5,14 +5,11 @@ from google import genai
 st.set_page_config(page_title="SOS Passport AI", page_icon="🆘")
 
 # --- CONFIGURACIÓN DE IA ---
-# ASEGURATE DE QUE TU CLAVE ESTÉ ENTRE COMILLAS SIMPLES
-API_KEY = 'AIzaSyBp_8YN50oicqeuBltOT-WHB2Fh2yW5uhg' 
+# PEGA TU CLAVE ACÁ (Asegurate que empiece con AIza...)
+API_KEY = 'AIzaSyBp_8YN50oicqeuBltOT-WHB2Fh2yWSuhg' 
 
-try:
-    client = genai.Client(api_key=API_KEY)
-    # No usamos variable model aquí para evitar errores
-except Exception as e:
-    st.error("Error de conexión.")
+# Inicializamos el cliente fuera para que sea más estable
+client = genai.Client(api_key=API_KEY)
 
 # --- BASE DE DATOS ---
 destinos = {
@@ -37,8 +34,18 @@ if destino_sel != "Seleccionar...":
         st.link_button("🚀 Abrir Mapa", datos["mapa"])
         
         st.divider()
-        user_question = st.text_input("🤖 Preguntame algo:")
+        st.markdown("### 🤖 Asistente IA")
+        user_question = st.text_input("Preguntame sobre seguridad o trámites:")
+        
         if user_question:
-            # Nueva forma de llamar a la IA para evitar errores de modelo
-            response = client.models.generate_content(model="gemini-1.5-flash", contents=user_question)
-            st.write(response.text)
+            with st.spinner("Pensando..."):
+                try:
+                    # Formato correcto para la nueva librería google-genai
+                    response = client.models.generate_content(
+                        model="gemini-1.5-flash", 
+                        contents=f"Usuario en {destino_sel}. Ayuda con: {user_question}"
+                    )
+                    st.markdown("---")
+                    st.write(response.text)
+                except Exception as e:
+                    st.error("Hubo un problema con la clave de IA. Verificá que sea válida.")
