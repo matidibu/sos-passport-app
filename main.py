@@ -1,36 +1,39 @@
 import streamlit as st
 import google.generativeai as genai
 
-# 1. Configuración básica
+# Configuración básica
 st.set_page_config(page_title="SOS Passport AI", page_icon="🆘")
 
-# 2. Tu Nueva Clave
-API_KEY = "AIzaSyCwiTUy63Szy_eNB8l_Z9iIQyi8CVS4sEU"
-genai.configure(api_key=API_KEY)
+# 1. EL CÓDIGO BUSCA LA LLAVE EN LA CAJA FUERTE, NO ACÁ.
+try:
+    if "GOOGLE_API_KEY" in st.secrets:
+        genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
+    else:
+        st.error("⚠️ Error: No se encontró la llave en los Secrets de Streamlit.")
+except Exception as e:
+    st.error(f"Error de configuración: {e}")
 
-# 3. Base de Datos
+# 2. Base de Datos
 destinos = {
     "Madrid, España": {"codigo": "MADRID2026", "info": "Calle de Fernando el Santo 15"}
 }
 
 st.title("🆘 SOS Passport AI")
-destino = st.selectbox("📍 Destino", ["Seleccionar...", "Madrid, España"])
+destino_sel = st.selectbox("📍 Destino", ["Seleccionar...", "Madrid, España"])
 
-if destino != "Seleccionar...":
+if destino_sel != "Seleccionar...":
     cod = st.text_input("🔑 Código", type="password")
-    if cod == destinos[destino]["codigo"]:
+    if cod == destinos[destino_sel]["codigo"]:
         st.success("ACCESO OK")
-        
         pregunta = st.text_input("🤖 Consultá a la IA:")
         if pregunta:
             with st.spinner("Pensando..."):
                 try:
-                    # FORZAMOS EL MODELO 1.0 PRO (El más compatible en Argentina)
+                    # Usamos el modelo 1.0-pro que es el más estable en Santa Fe
                     model = genai.GenerativeModel('gemini-1.0-pro')
                     response = model.generate_content(pregunta)
                     st.write(response.text)
                 except Exception as e:
-                    st.error(f"Error de conexión: {e}")
-                    st.info("Intentá usar los datos del celular (Hotspot) un segundo, a veces el Wi-Fi local bloquea a Google.")
+                    st.error(f"Error: {e}")
 
 st.caption("SOS Passport © 2026")
