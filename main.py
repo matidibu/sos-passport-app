@@ -1,47 +1,58 @@
 import streamlit as st
-from google import genai
+import google.generativeai as genai
 
+# 1. Configuración de la página
 st.set_page_config(page_title="SOS Passport AI", page_icon="🆘")
 
-# 1. Tu Clave
-API_KEY = 'AIzaSyBp_8YN50oicqeuBltOT-WHB2Fh2yW5uhg' 
+# 2. Configuración de la IA (Con tu clave nueva)
+API_KEY = "AIzaSyCwiTUy63Szy_eNB8l_Z9iIQyi8CVS4sEU"
+genai.configure(api_key=API_KEY)
 
-try:
-    client = genai.Client(api_key=API_KEY)
-except Exception as e:
-    st.error(f"Error de cliente: {e}")
-
-# 2. Base de Datos Simple
+# 3. Base de Datos
 destinos = {
-    "Florianópolis, Brasil": {"codigo": "FLORIPA2026", "consulado": "Saco Grande, Sala 218."},
-    "Madrid, España": {"codigo": "MADRID2026", "consulado": "Chamberí, Madrid."}
+    "Florianópolis, Brasil": {
+        "consulado": "Rod. José Carlos Daux 5500, Torre Campeche, Sala 218.",
+        "telefono": "+55 48 3024-3035",
+        "codigo": "FLORIPA2026"
+    },
+    "Madrid, España": {
+        "consulado": "Calle de Fernando el Santo 15, 28010 Madrid.",
+        "telefono": "+34 914 02 51 15",
+        "codigo": "MADRID2026"
+    }
 }
 
+# 4. Interfaz
 st.title("🆘 SOS Passport AI")
-destino_sel = st.selectbox("📍 Destino", ["Seleccionar..."] + list(destinos.keys()))
+st.markdown("### Asistencia al Viajero")
+
+destino_sel = st.selectbox("📍 Seleccioná destino", ["Seleccionar..."] + list(destinos.keys()))
 
 if destino_sel != "Seleccionar...":
-    codigo = st.text_input("🔑 Código", type="password")
-    if codigo == destinos[destino_sel]["codigo"]:
-        st.success("ACCESO OK")
-        st.write(f"🏛️ Consulado: {destinos[destino_sel]['consulado']}")
-        
-        pregunta = st.text_input("🤖 Chat:")
-        if pregunta:
-            # PRUEBA DE TRES NOMBRES DIFERENTES PARA EL MODELO
-            modelos_a_probar = ["gemini-1.5-flash", "models/gemini-1.5-flash", "gemini-1.5-flash-001"]
-            exito = False
-            
-            for m in modelos_a_probar:
-                if not exito:
-                    try:
-                        response = client.models.generate_content(model=m, contents=pregunta)
-                        st.write(response.text)
-                        exito = True
-                    except:
-                        continue # Si falla uno, prueba el siguiente
-            
-            if not exito:
-                st.error("Google no reconoce ningún nombre de modelo. Revisá AI Studio.")
+    datos = destinos[destino_sel]
+    codigo_input = st.text_input("🔑 Código de acceso", type="password")
 
+    if codigo_input == datos["codigo"]:
+        st.success("✅ ACCESO CONCEDIDO")
+        st.info(f"🏛️ **Consulado:** {datos['consulado']}\n\n📞 **Teléfono:** {datos['telefono']}")
+        
+        st.divider()
+        st.markdown("### 🤖 Consulta a la IA")
+        user_question = st.text_input("¿En qué puedo ayudarte?")
+        
+        if user_question:
+            with st.spinner("Obteniendo respuesta..."):
+                try:
+                    # Usamos el modelo 1.5-flash que es el más rápido
+                    model = genai.GenerativeModel('gemini-1.5-flash')
+                    response = model.generate_content(user_question)
+                    
+                    st.markdown("---")
+                    st.write(response.text)
+                except Exception as e:
+                    st.error(f"Error de Google: {e}")
+    elif codigo_input != "":
+        st.error("❌ Código incorrecto")
+
+st.divider()
 st.caption("SOS Passport © 2026")
