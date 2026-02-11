@@ -6,7 +6,7 @@ st.set_page_config(page_title="SOS Passport AI", page_icon="🆘", layout="cente
 
 # --- 1. CONFIGURACIÓN DE IA ---
 # IMPORTANTE: Una sola comilla al principio y una sola al final.
-API_KEY = 'AIzaSyBp_8YN50oicqeuBltOT-WHB2Fh2yW5uhg' 
+API_KEY ="AIzaSyBp_8YN50oicqeuBltOT-WHB2Fh2yW5uhg"
 
 try:
     client = genai.Client(api_key=API_KEY)
