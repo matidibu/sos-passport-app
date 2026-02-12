@@ -1,36 +1,84 @@
 import streamlit as st
-import streamlit.components.v1 as components
+from groq import Groq
+import json
 
-# Función para obtener coordenadas (vía JS)
-def get_location():
-    # Este script le pide al navegador la latitud y longitud
-    js_code = """
-    <script>
-    navigator.geolocation.getCurrentPosition(
-        (position) => {
-            const lat = position.coords.latitude;
-            const lon = position.coords.longitude;
-            window.parent.postMessage({type: 'location', lat: lat, lon: lon}, '*');
-        }
-    );
-    </script>
-    """
-    components.html(js_code, height=0)
+# Configuración de página
+st.set_page_config(page_title="SOS Passport AI", page_icon="🆘", layout="wide")
 
-st.title("🆘 SOS Passport - Localizador de Emergencia")
+# Conexión con Groq
+client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 
-if st.button("📍 Encontrarme y buscar ayuda cercana"):
-    get_location()
-    st.info("Buscando hospital y consulado más cercanos a tu posición actual...")
+st.title("🆘 SOS Passport AI")
+st.markdown("---")
+
+# ==========================================
+# SECCIÓN 1: BUSCADOR DE CIUDAD (Prioridad)
+# ==========================================
+st.subheader("🔍 Planificá tu viaje")
+ciudad_buscada = st.text_input("Ingresá la ciudad de destino (Ej: Roma, Madrid, Londres)", "")
+
+if ciudad_buscada:
+    if st.button(f"Generar Guía para {ciudad_buscada}"):
+        with st.spinner(f"Construyendo kit de emergencia para {ciudad_buscada}..."):
+            try:
+                # El Prompt solicita info y además el link de búsqueda de Google Maps
+                prompt = f"""
+                Genera una ficha de emergencia para {ciudad_buscada} en formato JSON.
+                Incluye:
+                "consulado": "Dirección y tel del consulado argentino",
+                "hospital": "Nombre del mejor hospital cercano",
+                "seguridad": "Consejo clave de seguridad",
+                "puntos_interes": "3 lugares icónicos recomendados por viajeros"
+                """
+                
+                chat_completion = client.chat.completions.create(
+                    messages=[{"role": "user", "content": prompt}],
+                    model="llama-3.3-70b-versatile",
+                    response_format={"type": "json_object"}
+                )
+                
+                res = json.loads(chat_completion.choices[0].message.content)
+                
+                # Diseño de la respuesta
+                st.success(f"📍 Destino: {ciudad_buscada}")
+                c1, c2, c3 = st.columns(3)
+                with c1:
+                    st.info(f"🏛️ **Consulado**\n\n{res['consulado']}")
+                    # Link directo a Google Maps para esa ciudad
+                    url_maps = f"https://www.google.com/maps/search/consulado+argentino+en+{ciudad_buscada.replace(' ', '+')}"
+                    st.link_button("🗺️ Ver en Mapa", url_maps)
+                with c2:
+                    st.error(f"🏥 **Hospital**\n\n{res['hospital']}")
+                    url_hosp = f"https://www.google.com/maps/search/hospitales+en+{ciudad_buscada.replace(' ', '+')}"
+                    st.link_button("🚑 Buscar Hospitales", url_hosp)
+                with c3:
+                    st.warning(f"🌟 **Imperdibles**\n\n{res['puntos_interes']}")
+                    st.success(f"🛡️ **Seguridad**\n\n{res['seguridad']}")
+            
+            except Exception as e:
+                st.error("Error al conectar con el cerebro de la IA.")
+
+st.markdown("---")
+
+# ==========================================
+# SECCIÓN 2: UBICACIÓN ACTUAL (Auxilio)
+# ==========================================
+st.subheader("📍 Auxilio Inmediato")
+st.write("¿Ya estás de viaje? Obtené ayuda basada en tu posición actual.")
+
+if st.button("🆘 Detectar mi ubicación y buscar ayuda"):
+    # Nota: Aquí usamos el link dinámico de Google Maps que abre el GPS del usuario
+    st.info("Detectando GPS... Abrí los siguientes accesos directos para ayuda inmediata:")
     
-    # Aquí integraríamos la búsqueda de Google Maps con la info que ya recuperamos
-    st.markdown("""
-    ### 🏥 Hospital más cercano
-    **Hospital Cullen** - [Abrir en Google Maps](https://www.google.com/maps/dir/?api=1&destination=-31.6485,-60.7189)
+    col_gps1, col_gps2 = st.columns(2)
+    with col_gps1:
+        # Este link busca hospitales cerca de donde esté el usuario parado
+        st.link_button("🏥 Hospital más cercano (GPS)", "https://www.google.com/maps/search/hospital+near+me/")
+    with col_gps2:
+        # Este link busca el consulado argentino más cercano a su GPS
+        st.link_button("🏛️ Consulado Argentino (GPS)", "https://www.google.com/maps/search/consulado+argentino+near+me/")
     
-    ### 🏛️ Consulado más cercano
-    **Viceconsulado** - [Cómo llegar](https://www.google.com/maps/dir/?api=1&destination=-31.6382,-60.7031)
-    """)
-    
-    # Mostrar el mapa embebido
-    st.components.v1.iframe("URL_DE_GOOGLE_MAPS_CON_TUS_PUNTOS", height=400)
+    st.caption("Al hacer clic, se abrirá Google Maps con tu ubicación en tiempo real.")
+
+st.divider()
+st.caption("SOS Passport © 2026 - Tu seguridad es nuestra prioridad.")
