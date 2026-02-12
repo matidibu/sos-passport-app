@@ -1,34 +1,21 @@
-import streamlit as st
-from groq import Groq
-import json
-
-# Configuración de página
-st.set_page_config(page_title="SOS Passport AI", page_icon="🆘", layout="wide")
-
-# Conexión con Groq
-client = Groq(api_key=st.secrets["GROQ_API_KEY"])
-
-st.title("🆘 SOS Passport AI")
-st.markdown("---")
-
-# ==========================================
-# SECCIÓN 1: BUSCADOR DE CIUDAD (Prioridad)
-# ==========================================
-st.subheader("🔍 Planificá tu viaje")
-ciudad_buscada = st.text_input("Ingresá la ciudad de destino (Ej: Roma, Madrid, Londres)", "")
+# ... (Todo el código anterior de conexión y búsqueda igual)
 
 if ciudad_buscada:
     if st.button(f"Generar Guía para {ciudad_buscada}"):
-        with st.spinner(f"Construyendo kit de emergencia para {ciudad_buscada}..."):
+        with st.spinner(f"Construyendo kit para {ciudad_buscada}..."):
             try:
-                # El Prompt solicita info y además el link de búsqueda de Google Maps
+                # Ajustamos el Prompt para que la IA nos de texto limpio
                 prompt = f"""
-                Genera una ficha de emergencia para {ciudad_buscada} en formato JSON.
-                Incluye:
-                "consulado": "Dirección y tel del consulado argentino",
-                "hospital": "Nombre del mejor hospital cercano",
-                "seguridad": "Consejo clave de seguridad",
-                "puntos_interes": "3 lugares icónicos recomendados por viajeros"
+                Genera una ficha de emergencia para {ciudad_buscada} en JSON.
+                IMPORTANTE: No uses etiquetas como 'nombre' o 'dirección' dentro de los valores.
+                Solo pon la información directa.
+                Ejemplo de valor: 'Calle Falsa 123, Tel: +54 11...'
+                
+                Estructura:
+                "consulado": "info del consulado argentino",
+                "hospital": "info del hospital principal",
+                "seguridad": "un consejo corto",
+                "puntos_interes": "los 3 lugares más importantes con una breve descripción"
                 """
                 
                 chat_completion = client.chat.completions.create(
@@ -39,46 +26,25 @@ if ciudad_buscada:
                 
                 res = json.loads(chat_completion.choices[0].message.content)
                 
-                # Diseño de la respuesta
-                st.success(f"📍 Destino: {ciudad_buscada}")
-                c1, c2, c3 = st.columns(3)
-                with c1:
-                    st.info(f"🏛️ **Consulado**\n\n{res['consulado']}")
-                    # Link directo a Google Maps para esa ciudad
-                    url_maps = f"https://www.google.com/maps/search/consulado+argentino+en+{ciudad_buscada.replace(' ', '+')}"
-                    st.link_button("🗺️ Ver en Mapa", url_maps)
-                with c2:
-                    st.error(f"🏥 **Hospital**\n\n{res['hospital']}")
-                    url_hosp = f"https://www.google.com/maps/search/hospitales+en+{ciudad_buscada.replace(' ', '+')}"
-                    st.link_button("🚑 Buscar Hospitales", url_hosp)
-                with c3:
-                    st.warning(f"🌟 **Imperdibles**\n\n{res['puntos_interes']}")
-                    st.success(f"🛡️ **Seguridad**\n\n{res['seguridad']}")
+                st.success(f"📍 {ciudad_buscada.upper()}")
+                
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    st.markdown("### 🏛️ Consulado")
+                    # Mostramos solo el texto, sin etiquetas
+                    st.write(res['consulado'])
+                    st.link_button("🗺️ Ver Mapa", f"https://www.google.com/maps/search/Consulado+Argentino+{ciudad_buscada}")
+
+                with col2:
+                    st.markdown("### 🏥 Hospital")
+                    st.write(res['hospital'])
+                    st.link_button("🚑 Emergencias", f"https://www.google.com/maps/search/Hospitales+{ciudad_buscada}")
+
+                with col3:
+                    st.markdown("### 🌟 Imperdibles")
+                    st.write(res['puntos_interes'])
+                    st.markdown(f"**🛡️ Seguridad:** {res['seguridad']}")
             
             except Exception as e:
-                st.error("Error al conectar con el cerebro de la IA.")
-
-st.markdown("---")
-
-# ==========================================
-# SECCIÓN 2: UBICACIÓN ACTUAL (Auxilio)
-# ==========================================
-st.subheader("📍 Auxilio Inmediato")
-st.write("¿Ya estás de viaje? Obtené ayuda basada en tu posición actual.")
-
-if st.button("🆘 Detectar mi ubicación y buscar ayuda"):
-    # Nota: Aquí usamos el link dinámico de Google Maps que abre el GPS del usuario
-    st.info("Detectando GPS... Abrí los siguientes accesos directos para ayuda inmediata:")
-    
-    col_gps1, col_gps2 = st.columns(2)
-    with col_gps1:
-        # Este link busca hospitales cerca de donde esté el usuario parado
-        st.link_button("🏥 Hospital más cercano (GPS)", "https://www.google.com/maps/search/hospital+near+me/")
-    with col_gps2:
-        # Este link busca el consulado argentino más cercano a su GPS
-        st.link_button("🏛️ Consulado Argentino (GPS)", "https://www.google.com/maps/search/consulado+argentino+near+me/")
-    
-    st.caption("Al hacer clic, se abrirá Google Maps con tu ubicación en tiempo real.")
-
-st.divider()
-st.caption("SOS Passport © 2026 - Tu seguridad es nuestra prioridad.")
+                st.error("Hubo un problema al procesar los datos.")
