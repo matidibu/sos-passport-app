@@ -13,30 +13,28 @@ st.subheader("🔍 Planificá tu viaje")
 ciudad_input = st.text_input("Ingresá la ciudad de destino", key="buscador")
 
 if ciudad_input:
-    if st.button(f"Generar Guía Completa para {ciudad_input}"):
-        with st.spinner(f"Investigando a fondo {ciudad_input}..."):
+    if st.button(f"Generar Guía Premium para {ciudad_input}"):
+        with st.spinner(f"Investigando accesos y tickets en {ciudad_input}..."):
             try:
-                # Prompt avanzado para obtener detalles de puntos de interés
                 prompt = f"""
-                Genera una guía detallada para {ciudad_input} en JSON.
-                No uses etiquetas técnicas dentro de los valores.
+                Genera una guía de ultra-detalle para {ciudad_input} en JSON.
                 
-                Estructura:
+                Estructura requerida:
                 "consulado": "Info del consulado argentino",
                 "hospital": "Info del hospital recomendado",
+                "hospital_nombre": "Solo el nombre del hospital para el mapa",
                 "seguridad": "Consejo de seguridad",
+                "transporte_link": "Link a la web oficial de transporte público de la ciudad para comprar pases",
                 "puntos_interes": [
                     {{
                         "nombre": "Nombre del lugar",
-                        "reseña": "Breve descripción atractiva",
-                        "ubicacion": "Dirección exacta",
-                        "precios": "Costos de entrada o si es gratis",
-                        "horarios": "Días y horas de apertura",
-                        "como_llegar": "Transporte recomendado (metro, bus, a pie)",
-                        "tip_extra": "Dato curioso o mejor hora para ir"
-                    }},
-                    {{ "... otro lugar ..." }},
-                    {{ "... otro lugar ..." }}
+                        "reseña": "Breve descripción",
+                        "ubicacion": "Dirección",
+                        "precios": "Costo estimado",
+                        "ticket_link": "Link directo a la web de venta de entradas (oficial o Civitatis/GetYourGuide). Si es gratis, poner 'none'",
+                        "horarios": "Horarios",
+                        "como_llegar": "Transporte"
+                    }}
                 ]
                 """
                 
@@ -56,15 +54,22 @@ if ciudad_input:
                     with st.container(border=True):
                         st.markdown("#### 🏛️ Consulado Argentino")
                         st.write(res['consulado'])
+                        st.link_button("🗺️ Ver Consulado en Mapa", f"https://www.google.com/maps/search/Consulado+Argentino+{ciudad_input}")
+
                 with col2:
                     with st.container(border=True):
                         st.markdown("#### 🏥 Salud y Emergencias")
                         st.write(res['hospital'])
+                        st.link_button("🚑 Ver Hospital en Mapa", f"https://www.google.com/maps/search/{res['hospital_nombre']}+{ciudad_input}")
+
+                # Botón de Transporte Público
+                if res.get('transporte_link'):
+                    st.link_button("🎫 Comprar Pasajes de Transporte Público", res['transporte_link'], type="primary")
 
                 st.divider()
                 
-                # SECCIÓN PUNTOS DE INTERÉS (Desplegables)
-                st.subheader("🌟 Puntos de Interés Recomendados")
+                # SECCIÓN PUNTOS DE INTERÉS
+                st.subheader("🌟 Puntos de Interés y Tickets")
                 
                 for lugar in res['puntos_interes']:
                     with st.expander(f"📍 {lugar['nombre']}"):
@@ -77,18 +82,17 @@ if ciudad_input:
                             st.write(f"🕒 **Horarios:** {lugar['horarios']}")
                         with c2:
                             st.write(f"🚌 **Cómo llegar:** {lugar['como_llegar']}")
-                            st.write(f"💡 **Tip SOS:** {lugar['tip_extra']}")
+                            # Botón de tickets si no es gratis
+                            if lugar['ticket_link'] and lugar['ticket_link'] != "none":
+                                st.link_button(f"🛒 Comprar Entradas para {lugar['nombre']}", lugar['ticket_link'])
                         
-                        # Botón para ir al mapa directo del lugar
                         st.link_button(f"🗺️ Ir a {lugar['nombre']}", f"https://www.google.com/maps/search/{lugar['nombre']}+{ciudad_input}")
 
             except Exception as e:
-                st.error(f"Error al procesar la guía: {e}")
+                st.error(f"Error: {e}")
 
 st.divider()
-# Sección de GPS (Se mantiene igual abajo)
 st.subheader("📍 Auxilio Inmediato")
 if st.button("🆘 Buscar ayuda cerca mío ahora"):
-    st.info("Detectando GPS...")
     st.link_button("🏥 Hospital más cercano", "https://www.google.com/maps/search/hospital+near+me")
     st.link_button("🏛️ Consulado Argentino", "https://www.google.com/maps/search/consulado+argentino+near+me")
