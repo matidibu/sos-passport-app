@@ -2,72 +2,78 @@ import streamlit as st
 from groq import Groq
 from supabase import create_client, Client
 import json
-from datetime import datetime, timedelta
+from datetime import datetime
 import urllib.parse
 
-# 1. CONFIGURACIÓN
+# 1. ESTILO "CLARIDAD SOS"
 st.set_page_config(page_title="SOS Passport AI", page_icon="🆘", layout="wide")
 
+st.markdown("""
+    <style>
+    .stApp { background-color: #ffffff; color: #1e1e1e; }
+    .main-title { color: #ff4b4b; font-weight: 900; font-size: 3rem !important; letter-spacing: -1px; }
+    .punto-card {
+        background: #fdfdfd;
+        border-radius: 12px;
+        padding: 25px;
+        border: 1px solid #eee;
+        border-left: 6px solid #ff4b4b;
+        margin-bottom: 25px;
+        box-shadow: 0px 4px 10px rgba(0,0,0,0.03);
+    }
+    .precio-tag { color: #2e7d32; font-weight: bold; font-size: 1.1rem; }
+    </style>
+    """, unsafe_allow_html=True)
+
+# 2. CONEXIONES
 try:
     supabase: Client = create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
     client = Groq(api_key=st.secrets["GROQ_API_KEY"])
-except Exception as e:
-    st.error("Error de conexión. Revisa los Secrets.")
+except:
+    st.error("Error de conexión.")
     st.stop()
 
-# 2. INTERFAZ
-st.title("🆘 SOS Passport AI - Experiencia Integral")
+# 3. INTERFAZ DE USUARIO
+st.markdown('<h1 class="main-title">SOS PASSPORT</h1>', unsafe_allow_html=True)
 
-col1, col2, col3 = st.columns([1, 1, 1])
-with col1:
-    nacionalidad = st.text_input("🌎 Nacionalidad", value="Argentina")
-with col2:
-    ciudad_input = st.text_input("📍 Ciudad de destino", placeholder="Ej: Río de Janeiro")
-with col3:
-    tipo_experiencia = st.multiselect(
-        "🎭 ¿Qué buscas?", 
-        ["Educación", "Entretenimiento", "Relax", "Gastronomía", "Aventura"],
-        default=["Educación", "Entretenimiento"]
-    )
+with st.container(border=True):
+    col1, col2, col3 = st.columns([1, 1, 1])
+    with col1:
+        nacionalidad = st.text_input("🌎 Nacionalidad", value="Argentina")
+    with col2:
+        ciudad_input = st.text_input("📍 Ciudad de destino", placeholder="Ej: Roma, Italia")
+    with col3:
+        # Reincorporamos el menú de idioma que pediste
+        idioma = st.selectbox("🗣️ Idioma de la Guía", ["Español", "English", "Português", "Italiano", "Français"])
 
-st.markdown("---")
-
-if ciudad_input and nacionalidad:
-    # La clave ahora incluye el tipo de experiencia para que la base de datos sea específica
-    search_key = f"{ciudad_input.lower()}-{nacionalidad.lower()}"
-    
-    if st.button("Generar Guía Premium"):
+if st.button("GENERAR GUÍA INTEGRAL DE ASISTENCIA"):
+    if ciudad_input and nacionalidad:
+        search_key = f"{ciudad_input.lower().strip()}-{nacionalidad.lower().strip()}-{idioma.lower()}"
         guia_final = None
         
-        # A. BUSCAR EN BASE DE DATOS
-        try:
-            query = supabase.table("guias").select("*").eq("clave_busqueda", search_key).execute()
-            if query.data:
-                guia_final = query.data[0]['datos_jsonb']
-                st.info("💡 Recuperando guía completa de la base de datos...")
-        except:
-            pass
-
-        # B. SI NO EXISTE, GENERAR CON IA (MÁS POTENTE)
+        # BUSCAR EN DB
+        res = supabase.table("guias").select("*").eq("clave_busqueda", search_key).execute()
+        if res.data:
+            guia_final = res.data[0]['datos_jsonb']
+        
+        # GENERAR CON IA (PIDIENDO TODA LA INFO DETALLADA)
         if not guia_final:
-            with st.spinner("Construyendo una experiencia integral..."):
+            with st.spinner(f"Generando protocolo en {idioma}..."):
                 prompt = f"""
-                Genera una guía turística y técnica EXHAUSTIVA para un {nacionalidad} en {ciudad_input}.
-                Debes incluir al menos 10 puntos de interés variados.
-                
-                Responde ÚNICAMENTE con un objeto JSON:
+                Genera una guía de asistencia para un {nacionalidad} en {ciudad_input} en idioma {idioma}.
+                Incluye 12 puntos de interés.
+                Responde estrictamente en JSON con:
                 {{
-                    "consulado": "Info detallada del consulado",
-                    "hospital_nombre": "Nombre hospital principal",
-                    "hospital_info": "Dirección y contacto",
-                    "puntos_interes": [
+                    "emergencia": {{"consulado": "info", "hospital": "nombre y dir"}},
+                    "puntos": [
                         {{
                             "nombre": "Nombre del lugar",
-                            "categoria": "Educación, Entretenimiento, Relax, Gastronomía o Aventura",
-                            "reseña": "Descripción atractiva",
-                            "ranking": "⭐ (del 1 al 5)",
-                            "horarios": "Info de apertura",
-                            "tip_viajero": "Un consejo único para este lugar"
+                            "resenia": "Reseña histórica y turística atractiva",
+                            "ranking": "⭐⭐⭐⭐⭐",
+                            "horario": "Horarios detallados",
+                            "precio": "Costo de entrada aproximado en moneda local",
+                            "link_entradas": "URL oficial o de ticketera (o 'No requiere')",
+                            "ubicacion": "Dirección o referencia"
                         }}
                     ]
                 }}
@@ -78,41 +84,53 @@ if ciudad_input and nacionalidad:
                     response_format={"type": "json_object"}
                 )
                 guia_final = json.loads(completion.choices[0].message.content)
-                
-                # Guardar
-                supabase.table("guias").upsert({
-                    "clave_busqueda": search_key,
-                    "datos_jsonb": guia_final,
-                    "created_at": datetime.now().isoformat()
-                }).execute()
+                supabase.table("guias").upsert({"clave_busqueda": search_key, "datos_jsonb": guia_final}).execute()
 
-        # 3. MOSTRAR RESULTADOS FILTRADOS
+        # 4. DESPLIEGUE DE LA GUÍA
         if guia_final:
-            # Sección Emergencias
-            st.subheader("🚨 Información Esencial")
-            c1, c2 = st.columns(2)
-            with c1:
-                st.info(f"🏛️ **Consulado:** {guia_final['consulado']}")
-            with c2:
-                st.error(f"🏥 **Hospital:** {guia_final['hospital_nombre']}\n\n{guia_final['hospital_info']}")
-
             st.divider()
-            st.subheader(f"📍 Lo mejor de {ciudad_input.title()}")
-
-            # Filtrado por la elección del usuario
-            puntos = guia_final.get('puntos_interes', [])
             
-            # Mostramos los puntos según la categoría elegida
-            for punto in puntos:
-                if not tipo_experiencia or punto['categoria'] in tipo_experiencia:
-                    with st.container(border=True):
-                        col_a, col_b = st.columns([3, 1])
-                        with col_a:
-                            st.markdown(f"### {punto['nombre']} {punto['ranking']}")
-                            st.caption(f"Categoría: {punto['categoria']}")
-                            st.write(punto['reseña'])
-                            st.info(f"💡 **Tip:** {punto['tip_viajero']}")
-                        with col_b:
-                            st.write(f"⏰ {punto['horarios']}")
-                            q = urllib.parse.quote(f"{punto['nombre']} {ciudad_input}")
-                            st.link_button("🗺️ Ver Mapa", f"https://www.google.com/maps/search/{q}")
+            # Bloque de Emergencia
+            st.subheader("🚨 Información de Seguridad")
+            em = guia_final.get('emergencia', {})
+            c1, c2 = st.columns(2)
+            with c1: st.info(f"🏛️ **Consulado:** {em.get('consulado')}")
+            with c2: st.error(f"🏥 **Hospital:** {em.get('hospital')}")
+
+            st.write("---")
+            st.subheader(f"📍 Explorando {ciudad_input.title()}")
+            
+            # Carrusel visual
+            st.image([f"https://source.unsplash.com/1200x400/?{ciudad_input}", 
+                      f"https://source.unsplash.com/1200x400/?{ciudad_input},monument"], use_container_width=True)
+
+            # Listado Exhaustivo de Puntos
+            for p in guia_final.get('puntos', []):
+                with st.container():
+                    st.markdown(f"""
+                    <div class="punto-card">
+                        <div style="display:flex; justify-content:space-between;">
+                            <h3 style="margin:0; color:#ff4b4b;">{p.get('nombre')}</h3>
+                            <span style="font-size:1.2rem;">{p.get('ranking')}</span>
+                        </div>
+                        <p style="margin-top:10px; font-size:1.1rem; line-height:1.6;">{p.get('resenia')}</p>
+                        <hr style="border:0.5px solid #eee;">
+                        <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                            <p><b>⏰ Horario:</b> {p.get('horario')}</p>
+                            <p class="precio-tag"><b>💰 Precio:</b> {p.get('precio')}</p>
+                        </div>
+                        <p style="color:#666; font-size:0.9rem;">📍 {p.get('ubicacion')}</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    # Botones de Acción: Mapa y Entradas
+                    btn_col1, btn_col2 = st.columns(2)
+                    with btn_col1:
+                        q_map = urllib.parse.quote(f"{p['nombre']} {ciudad_input}")
+                        st.link_button(f"🗺️ VER MAPA", f"https://www.google.com/maps/search/{q_map}", use_container_width=True)
+                    with btn_col2:
+                        link = p.get('link_entradas', 'No requiere')
+                        if "http" in link:
+                            st.link_button(f"🎟️ COMPRAR ENTRADAS", link, use_container_width=True)
+                        else:
+                            st.button(f"🏷️ {link}", disabled=True, use_container_width=True)
