@@ -5,77 +5,72 @@ import json
 from datetime import datetime
 import urllib.parse
 
-# 1. IDENTIDAD VISUAL ÚNICA (CSS)
+# 1. ESTILO "MINIMAL SOS" (CSS)
 st.set_page_config(page_title="SOS Passport", page_icon="🆘", layout="wide")
 
 st.markdown("""
     <style>
-    /* Fondo oscuro profundo */
-    .stApp { background-color: #05070a; color: #e0e0e0; }
+    .stApp { background-color: #05070a; color: #ffffff; }
     
-    /* Tarjetas con efecto de cristal y borde neón */
-    .puntos-card {
-        background: rgba(255, 255, 255, 0.03);
-        border: 1px solid rgba(255, 75, 75, 0.3);
-        border-radius: 15px;
-        padding: 25px;
-        margin-bottom: 25px;
-        transition: 0.4s ease;
-    }
-    .puntos-card:hover {
-        border: 1px solid #ff4b4b;
-        box-shadow: 0px 0px 20px rgba(255, 75, 75, 0.2);
-        transform: translateY(-5px);
-    }
-    
-    /* Títulos con personalidad */
-    h1, h2, h3 { 
+    /* Título con identidad única */
+    .main-title { 
+        color: #ff4b4b; 
         font-family: 'Inter', sans-serif; 
-        font-weight: 800;
-        letter-spacing: -1px;
+        font-weight: 900; 
+        font-size: 4rem !important;
+        letter-spacing: -2px;
+        margin-bottom: 0px;
     }
-    .main-title { color: #ff4b4b; font-size: 3rem !important; }
     
-    /* Botones SOS */
+    /* Tarjetas de información */
+    .info-card {
+        background: #111418;
+        border-radius: 12px;
+        padding: 25px;
+        border-left: 6px solid #ff4b4b;
+        margin-bottom: 20px;
+    }
+    
+    /* Botón de acción masivo */
     .stButton>button {
         width: 100%;
-        border-radius: 10px;
-        background: linear-gradient(45deg, #ff4b4b, #8b0000);
+        background: #ff4b4b;
         color: white;
         border: none;
-        padding: 15px;
-        text-transform: uppercase;
+        padding: 20px;
+        font-size: 1.2rem;
         font-weight: bold;
-        letter-spacing: 2px;
+        border-radius: 8px;
+        transition: 0.3s;
     }
+    .stButton>button:hover { background: #d43f3f; box-shadow: 0px 0px 20px rgba(255, 75, 75, 0.4); }
     </style>
     """, unsafe_allow_html=True)
 
-# 2. CONEXIÓN (Blindada)
+# 2. CONEXIÓN
 try:
     supabase: Client = create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
     client = Groq(api_key=st.secrets["GROQ_API_KEY"])
-except Exception as e:
-    st.error("Error en el sistema de seguridad. Contactar soporte.")
+except:
+    st.error("Error de sistema.")
     st.stop()
 
-# 3. INTERFAZ DE USUARIO
-st.markdown('<h1 class="main-title">🆘 SOS PASSPORT</h1>', unsafe_allow_html=True)
-st.write("### Sistema Inteligente de Asistencia al Viajero")
+# 3. INTERFAZ DIRECTA
+st.markdown('<h1 class="main-title">SOS PASSPORT</h1>', unsafe_allow_html=True)
+st.write("### ASISTENCIA GLOBAL DE EMERGENCIA")
 
-col1, col2 = st.columns([2, 1])
-with col1:
-    ciudad_input = st.text_input("📍 OBJETIVO / DESTINO", placeholder="Ej: Río de Janeiro, Brasil")
-with col2:
+st.markdown("---")
+
+col_in1, col_in2 = st.columns(2)
+with col_in1:
+    ciudad_input = st.text_input("📍 DESTINO", placeholder="Ej: Río de Janeiro")
+with col_in2:
     nacionalidad = st.text_input("🌎 NACIONALIDAD", value="Argentina")
 
-experiencia = st.multiselect("🔍 FILTRAR POR INTERÉS", ["Educación", "Entretenimiento", "Relax", "Gastronomía", "Aventura"])
-
-if ciudad_input:
-    # Clave de búsqueda (sin espacios raros)
-    search_key = f"{ciudad_input.lower().strip()}-{nacionalidad.lower().strip()}"
-    
-    if st.button("DESPLEGAR PROTOCOLO DE VIAJE"):
+# Botón central único
+if st.button("GENERAR PROTOCOLO DE ASISTENCIA"):
+    if ciudad_input:
+        search_key = f"{ciudad_input.lower().strip()}-{nacionalidad.lower().strip()}"
         guia_final = None
         
         # BUSCAR EN DB
@@ -83,16 +78,16 @@ if ciudad_input:
             query = supabase.table("guias").select("*").eq("clave_busqueda", search_key).execute()
             if query.data:
                 guia_final = query.data[0]['datos_jsonb']
-                st.toast("Guía cargada desde reserva local.")
         except: pass
         
-        # SI NO ESTÁ, GENERAR CON IA
+        # GENERAR CON IA SI NO EXISTE (PIDIENDO 10 PUNTOS POR DEFECTO)
         if not guia_final:
-            with st.spinner("Generando inteligencia estratégica..."):
+            with st.spinner("CONECTANDO CON RED DE EMERGENCIA..."):
                 prompt = f"""
-                Genera una guía de 10 puntos para un {nacionalidad} en {ciudad_input}.
-                JSON con campos: 'consulado', 'hospital', 'puntos' (lista de 10 lugares).
-                Cada lugar en 'puntos' debe tener: 'nombre', 'categoria', 'descripcion', 'estrellas' (1-5), 'tip'.
+                Genera una guía de seguridad y turismo para un {nacionalidad} en {ciudad_input}.
+                Idioma: Español.
+                Incluye: consulado, hospital de referencia y 10 puntos de interés con ranking (1-5 estrellas).
+                Responde solo JSON. Campos: 'consulado', 'hospital', 'puntos' (nombre, descripcion, ranking, tip).
                 """
                 completion = client.chat.completions.create(
                     messages=[{"role": "user", "content": prompt}],
@@ -102,38 +97,44 @@ if ciudad_input:
                 guia_final = json.loads(completion.choices[0].message.content)
                 supabase.table("guias").upsert({"clave_busqueda": search_key, "datos_jsonb": guia_final}).execute()
 
-        # 4. DESPLIEGUE CON IDENTIDAD (Aquí arreglamos el KeyError)
+        # 4. DESPLIEGUE DE LA INFORMACIÓN
         if guia_final:
             st.divider()
             
-            # Galería de imágenes automática
-            st.image([f"https://source.unsplash.com/1200x400/?{ciudad_input}", 
-                      f"https://source.unsplash.com/1200x400/?{ciudad_input},culture"], 
-                     caption=f"Vistas estratégicas de {ciudad_input}", use_container_width=True)
+            # Cabecera de Emergencia
+            st.error(f"🚨 PROTOCOLO ACTIVO: {ciudad_input.upper()}")
+            c1, c2 = st.columns(2)
+            with c1:
+                st.markdown(f"**🏛️ CONSULADO {nacionalidad.upper()}**\n\n{guia_final.get('consulado')}")
+            with c2:
+                st.markdown(f"**🏥 HOSPITAL RECOMENDADO**\n\n{guia_final.get('hospital')}")
 
+            st.write("---")
+            st.subheader("📍 PUNTOS ESTRATÉGICOS Y RANKING")
+
+            # Carrusel de fotos (ahora arriba de los puntos para que sea visualmente impactante)
+            st.image([f"https://source.unsplash.com/1200x500/?{ciudad_input}", 
+                      f"https://source.unsplash.com/1200x500/?{ciudad_input},landmark"], 
+                     use_container_width=True)
+
+            # Listado de los 10 puntos sin filtros, directo
             for p in guia_final.get('puntos', []):
-                # Usamos .get() para que si la IA no manda un campo, no se rompa la app
-                nombre = p.get('nombre', 'Lugar Desconocido')
-                desc = p.get('descripcion', p.get('reseña', p.get('resenia', 'Información no disponible')))
-                cat = p.get('categoria', 'General')
-                ranking = p.get('estrellas', p.get('ranking', '⭐⭐⭐⭐'))
-                tip = p.get('tip', 'Disfruta tu visita.')
+                nombre = p.get('nombre', 'Lugar')
+                # Arreglo de seguridad para evitar el error de la 'ñ'
+                desc = p.get('descripcion', p.get('reseña', p.get('resenia', 'Info no disponible')))
+                ranking = p.get('ranking', '⭐⭐⭐⭐')
+                tip = p.get('tip', 'Recomendado.')
 
-                if not experiencia or cat in experiencia:
-                    st.markdown(f"""
-                    <div class="puntos-card">
-                        <div style="display:flex; justify-content:space-between; align-items:center;">
-                            <h3 style="margin:0; color:#ff4b4b;">{nombre}</h3>
-                            <span style="font-size:1.2em;">{ranking}</span>
-                        </div>
-                        <p style="color:#888; font-weight:bold; font-size:0.8em; text-transform:uppercase;">{cat}</p>
-                        <p style="font-size:1.05rem;">{desc}</p>
-                        <p style="background: rgba(255,255,255,0.05); padding: 10px; border-radius: 5px; border-left: 3px solid #ff4b4b;">
-                        <b>💡 CONSEJO SOS:</b> {tip}
-                        </p>
+                st.markdown(f"""
+                <div class="info-card">
+                    <div style="display:flex; justify-content:space-between;">
+                        <h3 style="margin:0; color:#ff4b4b;">{nombre}</h3>
+                        <span>{ranking}</span>
                     </div>
-                    """, unsafe_allow_html=True)
-                    
-                    # Botón de mapa limpio
-                    q_map = urllib.parse.quote(f"{nombre} {ciudad_input}")
-                    st.link_button(f"🧭 ABRIR RUTA HACIA {nombre.upper()}", f"https://www.google.com/maps/search/{q_map}")
+                    <p style="margin-top:10px; font-size:1.1rem;">{desc}</p>
+                    <p style="color:#888; font-size:0.9rem;"><b>💡 TIP SOS:</b> {tip}</p>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                q_map = urllib.parse.quote(f"{nombre} {ciudad_input}")
+                st.link_button(f"🗺️ MAPA: {nombre.upper()}", f"https://www.google.com/maps/search/{q_map}")
