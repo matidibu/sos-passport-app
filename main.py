@@ -2,99 +2,75 @@ import streamlit as st
 from groq import Groq
 from supabase import create_client, Client
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 import urllib.parse
 
-# 1. ESTILO "CLARIDAD SOS" (CSS)
-st.set_page_config(page_title="SOS Passport", page_icon="🆘", layout="wide")
+# 1. CONFIGURACIÓN
+st.set_page_config(page_title="SOS Passport AI", page_icon="🆘", layout="wide")
 
-st.markdown("""
-    <style>
-    /* Fondo Blanco y texto oscuro para máxima legibilidad */
-    .stApp { background-color: #ffffff; color: #1a1a1a; }
-    
-    /* Título con fuerza en Rojo */
-    .main-title { 
-        color: #ff4b4b; 
-        font-family: 'Helvetica Neue', sans-serif; 
-        font-weight: 900; 
-        font-size: 3.5rem !important;
-        letter-spacing: -1px;
-        margin-bottom: 0px;
-    }
-    
-    /* Tarjetas Blancas con sombra suave (Efecto Papel) */
-    .info-card {
-        background: #f8f9fa;
-        border-radius: 10px;
-        padding: 20px;
-        border: 1px solid #e9ecef;
-        border-left: 5px solid #ff4b4b;
-        margin-bottom: 20px;
-        box-shadow: 0px 4px 6px rgba(0,0,0,0.02);
-    }
-    
-    /* Inputs y botones adaptados */
-    .stTextInput>div>div>input {
-        background-color: #ffffff;
-        border: 1px solid #ced4da;
-    }
-    
-    .stButton>button {
-        width: 100%;
-        background-color: #ff4b4b;
-        color: white;
-        border: none;
-        padding: 18px;
-        font-weight: bold;
-        border-radius: 5px;
-        transition: 0.2s;
-    }
-    .stButton>button:hover {
-        background-color: #e63946;
-        box-shadow: 0px 5px 15px rgba(255, 75, 75, 0.3);
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
-# 2. CONEXIÓN
 try:
     supabase: Client = create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
     client = Groq(api_key=st.secrets["GROQ_API_KEY"])
-except:
-    st.error("Error de conexión con el servidor.")
+except Exception as e:
+    st.error("Error de conexión. Revisa los Secrets.")
     st.stop()
 
-# 3. INTERFAZ LIMPIA
-st.markdown('<h1 class="main-title">SOS PASSPORT</h1>', unsafe_allow_html=True)
-st.write("🌍 **ASISTENCIA GLOBAL AL VIAJERO** | PROTOCOLO DE SEGURIDAD")
-st.write("---")
+# 2. INTERFAZ
+st.title("🆘 SOS Passport AI - Experiencia Integral")
 
-col_in1, col_in2 = st.columns(2)
-with col_in1:
-    ciudad_input = st.text_input("📍 CIUDAD DE DESTINO", placeholder="Ej: Río de Janeiro")
-with col_in2:
-    nacionalidad = st.text_input("🌎 TU NACIONALIDAD", value="Argentina")
+col1, col2, col3 = st.columns([1, 1, 1])
+with col1:
+    nacionalidad = st.text_input("🌎 Nacionalidad", value="Argentina")
+with col2:
+    ciudad_input = st.text_input("📍 Ciudad de destino", placeholder="Ej: Río de Janeiro")
+with col3:
+    tipo_experiencia = st.multiselect(
+        "🎭 ¿Qué buscas?", 
+        ["Educación", "Entretenimiento", "Relax", "Gastronomía", "Aventura"],
+        default=["Educación", "Entretenimiento"]
+    )
 
-if st.button("DESPLEGAR GUÍA DE ASISTENCIA"):
-    if ciudad_input:
-        search_key = f"{ciudad_input.lower().strip()}-{nacionalidad.lower().strip()}"
+st.markdown("---")
+
+if ciudad_input and nacionalidad:
+    # La clave ahora incluye el tipo de experiencia para que la base de datos sea específica
+    search_key = f"{ciudad_input.lower()}-{nacionalidad.lower()}"
+    
+    if st.button("Generar Guía Premium"):
         guia_final = None
         
-        # BUSCAR EN DB
+        # A. BUSCAR EN BASE DE DATOS
         try:
             query = supabase.table("guias").select("*").eq("clave_busqueda", search_key).execute()
             if query.data:
                 guia_final = query.data[0]['datos_jsonb']
-        except: pass
-        
-        # GENERAR CON IA SI NO EXISTE
+                st.info("💡 Recuperando guía completa de la base de datos...")
+        except:
+            pass
+
+        # B. SI NO EXISTE, GENERAR CON IA (MÁS POTENTE)
         if not guia_final:
-            with st.spinner("Sincronizando datos de seguridad..."):
+            with st.spinner("Construyendo una experiencia integral..."):
                 prompt = f"""
-                Genera una guía técnica y turística para un {nacionalidad} en {ciudad_input}.
-                Idioma: Español.
-                JSON con campos: 'consulado', 'hospital', 'puntos' (lista de 10 lugares con nombre, descripcion, ranking y tip).
+                Genera una guía turística y técnica EXHAUSTIVA para un {nacionalidad} en {ciudad_input}.
+                Debes incluir al menos 10 puntos de interés variados.
+                
+                Responde ÚNICAMENTE con un objeto JSON:
+                {{
+                    "consulado": "Info detallada del consulado",
+                    "hospital_nombre": "Nombre hospital principal",
+                    "hospital_info": "Dirección y contacto",
+                    "puntos_interes": [
+                        {{
+                            "nombre": "Nombre del lugar",
+                            "categoria": "Educación, Entretenimiento, Relax, Gastronomía o Aventura",
+                            "reseña": "Descripción atractiva",
+                            "ranking": "⭐ (del 1 al 5)",
+                            "horarios": "Info de apertura",
+                            "tip_viajero": "Un consejo único para este lugar"
+                        }}
+                    ]
+                }}
                 """
                 completion = client.chat.completions.create(
                     messages=[{"role": "user", "content": prompt}],
@@ -102,55 +78,41 @@ if st.button("DESPLEGAR GUÍA DE ASISTENCIA"):
                     response_format={"type": "json_object"}
                 )
                 guia_final = json.loads(completion.choices[0].message.content)
-                supabase.table("guias").upsert({"clave_busqueda": search_key, "datos_jsonb": guia_final}).execute()
-
-        # 4. DESPLIEGUE DE RESULTADOS (DISEÑO LUMINOSO)
-        if guia_final:
-            st.divider()
-            
-            # Bloque de Emergencia
-            st.subheader(f"🚨 Información Crítica: {ciudad_input.upper()}")
-            ce1, ce2 = st.columns(2)
-            with ce1:
-                st.markdown(f"""
-                <div style="background:#fff5f5; padding:15px; border-radius:8px; border:1px solid #ffcccc;">
-                    <b style="color:#ff4b4b;">🏛️ CONSULADO DE {nacionalidad.upper()}</b><br>
-                    {guia_final.get('consulado')}
-                </div>
-                """, unsafe_allow_html=True)
-            with ce2:
-                st.markdown(f"""
-                <div style="background:#fff5f5; padding:15px; border-radius:8px; border:1px solid #ffcccc;">
-                    <b style="color:#ff4b4b;">🏥 HOSPITAL DE REFERENCIA</b><br>
-                    {guia_final.get('hospital')}
-                </div>
-                """, unsafe_allow_html=True)
-
-            st.write("---")
-            st.subheader("📍 Puntos Estratégicos Recomendados")
-            
-            # Imagen destacada
-            st.image(f"https://source.unsplash.com/1200x400/?{ciudad_input},city", use_container_width=True)
-
-            # Tarjetas de lugares
-            for p in guia_final.get('puntos', []):
-                nombre = p.get('nombre', 'Lugar')
-                desc = p.get('descripcion', p.get('reseña', p.get('resenia', 'Información no disponible')))
-                ranking = p.get('ranking', '⭐⭐⭐⭐')
-                tip = p.get('tip', 'Recomendado.')
-
-                st.markdown(f"""
-                <div class="info-card">
-                    <div style="display:flex; justify-content:space-between; align-items:center;">
-                        <h3 style="margin:0; color:#1a1a1a;">{nombre}</h3>
-                        <span style="color:#ff4b4b; font-weight:bold;">{ranking}</span>
-                    </div>
-                    <p style="margin-top:10px; color:#444;">{desc}</p>
-                    <p style="font-size:0.9rem; color:#666; border-top:1px solid #eee; padding-top:10px; margin-top:10px;">
-                        <b>💡 TIP SOS:</b> {tip}
-                    </p>
-                </div>
-                """, unsafe_allow_html=True)
                 
-                q_map = urllib.parse.quote(f"{nombre} {ciudad_input}")
-                st.link_button(f"📍 VER MAPA DE {nombre.upper()}", f"https://www.google.com/maps/search/{q_map}")
+                # Guardar
+                supabase.table("guias").upsert({
+                    "clave_busqueda": search_key,
+                    "datos_jsonb": guia_final,
+                    "created_at": datetime.now().isoformat()
+                }).execute()
+
+        # 3. MOSTRAR RESULTADOS FILTRADOS
+        if guia_final:
+            # Sección Emergencias
+            st.subheader("🚨 Información Esencial")
+            c1, c2 = st.columns(2)
+            with c1:
+                st.info(f"🏛️ **Consulado:** {guia_final['consulado']}")
+            with c2:
+                st.error(f"🏥 **Hospital:** {guia_final['hospital_nombre']}\n\n{guia_final['hospital_info']}")
+
+            st.divider()
+            st.subheader(f"📍 Lo mejor de {ciudad_input.title()}")
+
+            # Filtrado por la elección del usuario
+            puntos = guia_final.get('puntos_interes', [])
+            
+            # Mostramos los puntos según la categoría elegida
+            for punto in puntos:
+                if not tipo_experiencia or punto['categoria'] in tipo_experiencia:
+                    with st.container(border=True):
+                        col_a, col_b = st.columns([3, 1])
+                        with col_a:
+                            st.markdown(f"### {punto['nombre']} {punto['ranking']}")
+                            st.caption(f"Categoría: {punto['categoria']}")
+                            st.write(punto['reseña'])
+                            st.info(f"💡 **Tip:** {punto['tip_viajero']}")
+                        with col_b:
+                            st.write(f"⏰ {punto['horarios']}")
+                            q = urllib.parse.quote(f"{punto['nombre']} {ciudad_input}")
+                            st.link_button("🗺️ Ver Mapa", f"https://www.google.com/maps/search/{q}")
