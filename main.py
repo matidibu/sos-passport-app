@@ -4,13 +4,13 @@ from supabase import create_client, Client
 import json
 import urllib.parse
 
-# 1. ESTILO VIBRANTE
+# 1. ESTILO VIBRANTE Y LIMPIO
 st.set_page_config(page_title="SOS Passport", page_icon="🏖️", layout="wide")
 
 st.markdown("""
     <style>
     .stApp { background: linear-gradient(135deg, #f0faff 0%, #ffffff 100%); }
-    .main-title { color: #00838f; font-weight: 800; font-size: 3rem !important; }
+    .main-title { color: #00838f; font-weight: 800; font-size: 3rem !important; margin-bottom: 0; }
     .punto-card {
         background: white; border-radius: 20px; padding: 25px;
         box-shadow: 0px 10px 30px rgba(0, 131, 143, 0.1);
@@ -19,39 +19,49 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# 2. CONEXIONES SEGURAS
+# 2. CONEXIONES
 try:
     supabase = create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
     client = Groq(api_key=st.secrets["GROQ_API_KEY"])
-except Exception as e:
-    st.error("Error de configuración en Secrets.")
+except:
+    st.error("Error de configuración. Revisá tus Secrets.")
     st.stop()
 
+# 3. INTERFAZ
 st.markdown('<h1 class="main-title">SOS Passport 🏖️</h1>', unsafe_allow_html=True)
 st.write("### Tu guía de confianza para explorar y descansar.")
 
-# 3. HOME
 with st.container(border=True):
     c1, c2, c3 = st.columns(3)
     with c1: nac = st.text_input("🌎 Nacionalidad", value="Argentina")
     with c2: dest = st.text_input("📍 Destino", placeholder="Ej: Rio de Janeiro")
     with c3: lang = st.selectbox("🗣️ Idioma", ["Español", "English", "Português", "Italiano"])
 
-if st.button("¡EXPLORAR DESTINO!", use_container_width=True):
+if st.button("¡EXPLORAR MI DESTINO!", use_container_width=True):
     if dest:
-        search_key = f"{dest.lower().strip()}-{lang.lower()}"
+        # Usamos una clave de búsqueda que incluya nacionalidad para que la info sea específica
+        search_key = f"{dest.lower().strip()}-{nac.lower().strip()}-{lang.lower()}"
         guia = None
         
-        # Intentar traer de DB
         try:
             res = supabase.table("guias").select("*").eq("clave_busqueda", search_key).execute()
             if res.data: guia = res.data[0]['datos_jsonb']
         except: pass
         
-        # Si no hay, generar con IA
         if not guia:
-            with st.spinner("Creando tu experiencia ideal..."):
-                prompt = f"Genera guía JSON alegre para {nac} en {dest} en {lang}. 8 puntos de interés. Incluye campos: nombre, resenia, ranking, horario, precio, link_ticket, consulado_info, hospital_info."
+            with st.spinner("Buscando los mejores rincones..."):
+                # Prompt reforzado para que no falle el JSON
+                prompt = f"""Genera una guía de viaje vibrante para un {nac} en {dest} en {lang}. 
+                IMPORTANTE: Responde ÚNICAMENTE un objeto JSON con esta estructura exacta:
+                {{
+                    "consulado": "Info del consulado o embajada",
+                    "hospital": "Nombre y dirección de hospital recomendado",
+                    "puntos": [
+                        {{"nombre": "Lugar", "resenia": "Reseña corta", "ranking": "⭐⭐⭐⭐⭐", "horario": "Info", "precio": "Info", "link": "No requiere"}}
+                    ]
+                }}
+                Crea entre 7 y 9 puntos de interés."""
+                
                 chat = client.chat.completions.create(
                     messages=[{"role": "user", "content": prompt}],
                     model="llama-3.3-70b-versatile",
@@ -60,42 +70,41 @@ if st.button("¡EXPLORAR DESTINO!", use_container_width=True):
                 guia = json.loads(chat.choices[0].message.content)
                 supabase.table("guias").upsert({"clave_busqueda": search_key, "datos_jsonb": guia}).execute()
 
-        # 4. DESPLIEGUE DE RESULTADOS (AQUÍ ESTABA EL FALLO)
         if guia:
             st.divider()
+            # SECCIÓN SEGURIDAD
             st.subheader("🛡️ Seguridad y Salud")
-            ce1, ce2 = st.columns(2)
-            ce1.info(f"🏛️ **Consulado:** {guia.get('consulado_info', 'Consultar online')}")
-            ce2.success(f"🏥 **Hospital:** {guia.get('hospital_info', 'Consultar online')}")
+            col_s1, col_s2 = st.columns(2)
+            col_s1.info(f"🏛️ **Consulado:** {guia.get('consulado', 'Consultar online')}")
+            col_s2.success(f"🏥 **Hospital:** {guia.get('hospital', 'Consultar online')}")
 
             st.write("---")
             st.subheader(f"📍 Imperdibles en {dest.title()}")
             
-            # Buscamos la lista de puntos, sin importar cómo la llame la IA
-            puntos = guia.get('puntos', guia.get('puntos_interes', []))
+            # Lógica inteligente para encontrar la lista de puntos
+            puntos = guia.get('puntos', [])
             
             if not puntos:
-                st.warning("La IA no devolvió puntos. Intentá de nuevo.")
+                st.warning("Hacé clic de nuevo en el botón para refrescar la búsqueda.")
             
             for i, p in enumerate(puntos):
                 nombre_lugar = str(p.get('nombre', 'Lugar Turístico'))
-                
                 st.markdown(f"""
                 <div class="punto-card">
                     <h2 style="margin:0; color:#00838f;">{nombre_lugar}</h2>
-                    <p style="font-size:1.1rem; margin-top:10px;">{p.get('resenia', p.get('reseña', 'Sin descripción disponible.'))}</p>
-                    <p><b>⏰ Horario:</b> {p.get('horario', 'No especificado')} | <b>💰 Precio:</b> {p.get('precio', 'No especificado')}</p>
+                    <p style="font-size:1.1rem; margin-top:10px;">{p.get('resenia', p.get('reseña', ''))}</p>
+                    <p><b>⏰ Horario:</b> {p.get('horario')} | <b>💰 Precio:</b> {p.get('precio')}</p>
                 </div>
                 """, unsafe_allow_html=True)
                 
-                # BOTONES CON KEYS ÚNICAS (Arregla error d0725a)
+                # BOTONES (Blindados contra el TypeError)
                 bm, bt = st.columns(2)
                 with bm:
-                    q_url = urllib.parse.quote(f"{nombre_lugar} {dest}")
-                    st.link_button("🗺️ VER MAPA", f"https://www.google.com/maps/search/?api=1&query={q_url}", use_container_width=True, key=f"mapa_{i}")
+                    q_safe = urllib.parse.quote(f"{nombre_lugar} {dest}")
+                    st.link_button("🗺️ VER MAPA", f"https://www.google.com/maps/search/?api=1&query={q_safe}", use_container_width=True, key=f"map_{i}")
                 with bt:
-                    ticket = p.get('link_ticket', p.get('link', 'No requiere'))
-                    if "http" in str(ticket):
-                        st.link_button("🎟️ TICKETS", ticket, use_container_width=True, key=f"tix_{i}")
+                    link = p.get('link', p.get('link_ticket', 'No requiere'))
+                    if "http" in str(link):
+                        st.link_button("🎟️ TICKETS", link, use_container_width=True, key=f"tix_{i}")
                     else:
-                        st.button(f"✨ {ticket}", disabled=True, use_container_width=True, key=f"info_{i}")
+                        st.button(f"✨ {link}", disabled=True, use_container_width=True, key=f"info_{i}")
