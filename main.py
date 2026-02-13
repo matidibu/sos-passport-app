@@ -4,29 +4,23 @@ from supabase import create_client, Client
 import json
 import urllib.parse
 
-# 1. ESTILO "WHITE LABEL" (Identidad propia y limpia)
-st.set_page_config(page_title="SOS Passport AI", page_icon="🆘", layout="wide")
+# 1. ESTILO VIBRANTE (Confianza y Alegría)
+st.set_page_config(page_title="SOS Passport", page_icon="🏖️", layout="wide")
 
 st.markdown("""
     <style>
-    .stApp { background-color: #ffffff; color: #1a1a1a; }
-    .main-title { color: #ff4b4b; font-weight: 900; font-size: 3.5rem !important; letter-spacing: -2px; }
+    .stApp { background: linear-gradient(135deg, #f5fcfd 0%, #ffffff 100%); color: #2c3e50; }
+    .main-title { color: #007d8a; font-weight: 800; font-size: 3rem !important; margin-bottom: 0px; }
     .punto-card {
-        background: #ffffff;
-        border-radius: 12px;
+        background: white;
+        border-radius: 20px;
         padding: 25px;
-        border: 1px solid #f0f0f0;
-        border-left: 6px solid #ff4b4b;
+        box-shadow: 0px 10px 25px rgba(0,125,138,0.08);
         margin-bottom: 25px;
-        box-shadow: 0px 10px 20px rgba(0,0,0,0.05);
+        border-top: 6px solid #00acc1;
     }
-    .emergencia-box {
-        padding: 20px;
-        border-radius: 10px;
-        margin-bottom: 20px;
-        border: 1px solid #eee;
-    }
-    .label { font-weight: bold; color: #ff4b4b; text-transform: uppercase; font-size: 0.8rem; }
+    .emergencia-box { padding: 15px; border-radius: 12px; margin-bottom: 10px; border: 1px solid #e0f2f1; }
+    .label-mini { font-weight: bold; color: #007d8a; font-size: 0.7rem; text-transform: uppercase; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -35,38 +29,48 @@ try:
     supabase: Client = create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
     client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 except:
-    st.error("Error de configuración.")
+    st.error("Error de conexión. Verifica los Secrets.")
     st.stop()
 
-# 3. CABECERA
-st.markdown('<h1 class="main-title">SOS PASSPORT</h1>', unsafe_allow_html=True)
+# 3. HOME (Solo 3 campos, directo)
+st.markdown('<h1 class="main-title">SOS Passport 🏖️</h1>', unsafe_allow_html=True)
+st.write("Explorá tu destino con la tranquilidad de tenerlo todo bajo control.")
 
 with st.container(border=True):
-    c1, c2, c3 = st.columns([1, 1, 1])
+    c1, c2, c3 = st.columns(3)
     with c1: nac = st.text_input("🌎 Nacionalidad", value="Argentina")
-    with c2: dest = st.text_input("📍 Destino", placeholder="Ej: Estocolmo, Suecia")
+    with c2: dest = st.text_input("📍 Destino", placeholder="Ej: Madrid, España")
     with c3: lang = st.selectbox("🗣️ Idioma", ["Español", "English", "Português", "Italiano"])
 
-if st.button("DESPLEGAR GUÍA INTEGRAL", use_container_width=True):
+if st.button("¡GENERAR MI EXPERIENCIA!", use_container_width=True):
     if dest and nac:
         search_key = f"{dest.lower().strip()}-{nac.lower().strip()}-{lang.lower()}"
         guia = None
         
-        # BUSCAR EN DB
         try:
             res = supabase.table("guias").select("*").eq("clave_busqueda", search_key).execute()
             if res.data: guia = res.data[0]['datos_jsonb']
         except: pass
         
-        # GENERAR SI NO EXISTE
         if not guia:
-            with st.spinner("Sincronizando con satélites de información..."):
+            with st.spinner("Diseñando tu viaje ideal (Puntos 5-10)..."):
                 prompt = f"""
-                Genera una guía de 12 puntos para un {nac} en {dest} en {lang}.
-                JSON con campos: 
-                'consulado' (objeto: nombre, direccion, tel),
-                'hospital' (objeto: nombre, direccion, tel),
-                'puntos' (lista de 12 objetos: nombre, resenia, ranking, horario, precio, link_compra).
+                Genera una guía alegre para un {nac} en {dest} en {lang}.
+                Incluye: 8 puntos de interés.
+                Responde JSON:
+                {{
+                    "emergencia": {{"consulado_info": "Nombre, dirección y tel", "hospital_info": "Nombre y dirección"}},
+                    "puntos": [
+                        {{
+                            "nombre": "Lugar",
+                            "resenia": "Reseña vibrante",
+                            "ranking": "⭐⭐⭐⭐⭐",
+                            "horario": "Horarios",
+                            "precio": "Precio entradas",
+                            "link_ticket": "URL o 'No requiere'"
+                        }}
+                    ]
+                }}
                 """
                 chat = client.chat.completions.create(
                     messages=[{"role": "user", "content": prompt}],
@@ -76,59 +80,42 @@ if st.button("DESPLEGAR GUÍA INTEGRAL", use_container_width=True):
                 guia = json.loads(chat.choices[0].message.content)
                 supabase.table("guias").upsert({"clave_busqueda": search_key, "datos_jsonb": guia}).execute()
 
-        # 4. RESULTADOS (Limpieza de datos de las fotos)
         if guia:
             st.divider()
-            st.subheader("🚨 Protocolo de Emergencia")
-            col_e1, col_e2 = st.columns(2)
-            
-            with col_e1:
-                con = guia.get('consulado', {})
-                st.markdown(f"""<div class="emergencia-box" style="background:#f0f7ff;">
-                    <span class="label">🏛️ Consulado</span><br>
-                    <b>{con.get('nombre', 'No disponible')}</b><br>
-                    📍 {con.get('direccion', '')}<br>📞 {con.get('tel', '')}
-                </div>""", unsafe_allow_html=True)
-                
-            with col_e2:
-                hosp = guia.get('hospital', {})
-                st.markdown(f"""<div class="emergencia-box" style="background:#fff5f5;">
-                    <span class="label">🏥 Salud</span><br>
-                    <b>{hosp.get('nombre', 'No disponible')}</b><br>
-                    📍 {hosp.get('direccion', '')}<br>📞 {hosp.get('tel', '')}
-                </div>""", unsafe_allow_html=True)
+            # SECCIÓN EMERGENCIAS LIMPIA (Arregla foto d07ca2)
+            st.subheader("🛡️ Viajá con Confianza")
+            em = guia.get('emergencia', {})
+            ce1, ce2 = st.columns(2)
+            with ce1: 
+                st.markdown(f'<div class="emergencia-box" style="background:#e3f2fd;"><span class="label-mini">🏛️ Consulado</span><br>{em.get("consulado_info", "Consultar en destino")}</div>', unsafe_allow_html=True)
+            with ce2: 
+                st.markdown(f'<div class="emergencia-box" style="background:#f1f8e9;"><span class="label-mini">🏥 Hospital</span><br>{em.get("hospital_info", "Consultar en destino")}</div>', unsafe_allow_html=True)
 
-            st.write("---")
+            # PUNTOS DE INTERÉS (Arregla foto cf8ce0 y d0725a)
             st.subheader(f"📍 Imperdibles en {dest.title()}")
-            
-            # Carrusel
-            st.image([f"https://source.unsplash.com/1200x400/?{dest}", 
-                      f"https://source.unsplash.com/1200x400/?{dest},architecture"], use_container_width=True)
-
             for i, p in enumerate(guia.get('puntos', [])):
-                nombre = p.get('nombre', 'Lugar')
-                st.markdown(f"""
-                <div class="punto-card">
-                    <div style="display:flex; justify-content:space-between; align-items:center;">
-                        <h3 style="margin:0; color:#ff4b4b;">{nombre}</h3>
-                        <span style="font-size:1.2rem;">{p.get('ranking', '⭐⭐⭐⭐')}</span>
+                with st.container():
+                    st.markdown(f"""
+                    <div class="punto-card">
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <h2 style="margin:0; color:#007d8a;">{p.get('nombre')}</h2>
+                            <span>{p.get('ranking')}</span>
+                        </div>
+                        <p style="margin-top:15px; font-size:1.1rem;">{p.get('resenia', p.get('reseña', 'No hay descripción disponible.'))}</p>
+                        <div style="display:flex; gap:30px; margin-top:15px; background:#f9f9f9; padding:10px; border-radius:10px;">
+                            <span><b>⏰ Horario:</b> {p.get('horario')}</span>
+                            <span style="color:#2e7d32;"><b>💰 Entrada:</b> {p.get('precio')}</span>
+                        </div>
                     </div>
-                    <p style="margin-top:15px; font-size:1.1rem; color:#444;">{p.get('resenia', '')}</p>
-                    <div style="display:flex; gap:30px; margin-top:15px; border-top:1px solid #eee; padding-top:15px;">
-                        <div><span class="label">⏰ Horario</span><br>{p.get('horario', 'N/A')}</div>
-                        <div><span class="label">💰 Precio</span><br>{p.get('precio', 'Consultar')}</div>
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                # BOTONES CON KEY ÚNICA (Soluciona foto d0725a.jpg)
-                b1, b2 = st.columns(2)
-                with b1:
-                    q = urllib.parse.quote(f"{nombre} {dest}")
-                    st.link_button("🗺️ VER MAPA", f"https://www.google.com/maps/search/{q}", use_container_width=True, key=f"map_{i}")
-                with b2:
-                    link = p.get('link_compra', 'No requiere link')
-                    if "http" in str(link):
-                        st.link_button("🎟️ TICKETS", link, use_container_width=True, key=f"tix_{i}")
-                    else:
-                        st.button(f"🏷️ {link}", disabled=True, use_container_width=True, key=f"info_{i}")
+                    """, unsafe_allow_html=True)
+                    
+                    b1, b2 = st.columns(2)
+                    with b1:
+                        q = urllib.parse.quote(f"{p['nombre']} {dest}")
+                        st.link_button("🗺️ VER MAPA", f"https://www.google.com/maps/search/{q}", use_container_width=True, key=f"map_{i}")
+                    with b2:
+                        link = p.get('link_ticket', 'No requiere')
+                        if "http" in str(link):
+                            st.link_button("🎟️ ADQUIRIR ENTRADAS", link, use_container_width=True, key=f"tix_{i}")
+                        else:
+                            st.button(f"✨ {link}", disabled=True, use_container_width=True, key=f"info_{i}")
