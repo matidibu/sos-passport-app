@@ -2,119 +2,117 @@ import streamlit as st
 from groq import Groq
 from supabase import create_client, Client
 import json
+from datetime import datetime, timedelta
 import urllib.parse
 
-# 1. ESTILO PROPIO (LIMPIO Y RECONOCIBLE)
-st.set_page_config(page_title="SOS Passport", page_icon="🆘", layout="wide")
+# 1. CONFIGURACIÓN
+st.set_page_config(page_title="SOS Passport AI", page_icon="🆘", layout="wide")
 
-st.markdown("""
-    <style>
-    .stApp { background-color: #fdfdfd; }
-    .main-title { color: #ff4b4b; font-weight: 900; font-size: 3.5rem !important; margin-bottom: 0px; }
-    .card {
-        background: white;
-        padding: 20px;
-        border-radius: 12px;
-        box-shadow: 0 4px 15px rgba(0,0,0,0.05);
-        border: 1px solid #eee;
-        margin-bottom: 20px;
-    }
-    .tag {
-        background: #ff4b4b;
-        color: white;
-        padding: 3px 10px;
-        border-radius: 20px;
-        font-size: 0.7rem;
-        font-weight: bold;
-        text-transform: uppercase;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
-# 2. CONEXIONES
 try:
     supabase: Client = create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
     client = Groq(api_key=st.secrets["GROQ_API_KEY"])
-except:
-    st.error("Error de conexión.")
+except Exception as e:
+    st.error("Error de conexión. Revisa los Secrets.")
     st.stop()
 
-# 3. INTERFAZ: SOS PASSPORT
-st.markdown('<h1 class="main-title">SOS PASSPORT</h1>', unsafe_allow_html=True)
-st.write("### Tu Asistente Integral de Viaje")
+# 2. INTERFAZ
+st.title("🆘 SOS Passport AI - Experiencia Integral")
 
-# Buscador de Experiencias (Lo que me pediste)
-with st.container():
-    col1, col2, col3 = st.columns([2, 2, 3])
-    with col1:
-        ciudad = st.text_input("📍 ¿A dónde vas?", placeholder="Ej: Río de Janeiro")
-    with col2:
-        nacionalidad = st.text_input("🌎 Nacionalidad", value="Argentina")
-    with col3:
-        filtro_exp = st.multiselect(
-            "🎭 Personalizá tu experiencia", 
-            ["Educativa", "Entretenimiento", "Relax", "Aventura", "Gastronomía"],
-            default=["Educativa", "Relax"]
-        )
+col1, col2, col3 = st.columns([1, 1, 1])
+with col1:
+    nacionalidad = st.text_input("🌎 Nacionalidad", value="Argentina")
+with col2:
+    ciudad_input = st.text_input("📍 Ciudad de destino", placeholder="Ej: Río de Janeiro")
+with col3:
+    tipo_experiencia = st.multiselect(
+        "🎭 ¿Qué buscas?", 
+        ["Educación", "Entretenimiento", "Relax", "Gastronomía", "Aventura"],
+        default=["Educación", "Entretenimiento"]
+    )
 
-if st.button("GENERAR GUÍA INTEGRAL"):
-    if ciudad:
-        search_key = f"{ciudad.lower().strip()}-{nacionalidad.lower().strip()}"
+st.markdown("---")
+
+if ciudad_input and nacionalidad:
+    # La clave ahora incluye el tipo de experiencia para que la base de datos sea específica
+    search_key = f"{ciudad_input.lower()}-{nacionalidad.lower()}"
+    
+    if st.button("Generar Guía Premium"):
         guia_final = None
         
-        # BUSCAR EN SUPABASE
-        res = supabase.table("guias").select("*").eq("clave_busqueda", search_key).execute()
-        if res.data:
-            guia_final = res.data[0]['datos_jsonb']
-        
-        # SI NO ESTÁ, PEDIR 10+ PUNTOS A LA IA
+        # A. BUSCAR EN BASE DE DATOS
+        try:
+            query = supabase.table("guias").select("*").eq("clave_busqueda", search_key).execute()
+            if query.data:
+                guia_final = query.data[0]['datos_jsonb']
+                st.info("💡 Recuperando guía completa de la base de datos...")
+        except:
+            pass
+
+        # B. SI NO EXISTE, GENERAR CON IA (MÁS POTENTE)
         if not guia_final:
-            with st.spinner("Construyendo guía con más de 10 puntos de interés..."):
+            with st.spinner("Construyendo una experiencia integral..."):
                 prompt = f"""
-                Crea una guía para un {nacionalidad} en {ciudad}. 
-                Incluye obligatoriamente: 
-                1. Consulado y Hospital.
-                2. Una lista de al menos 12 puntos de interés.
-                Cada punto debe tener: nombre, categoria (Educativa, Entretenimiento, Relax, Aventura, Gastronomía), ranking (1 a 5 estrellas), descripcion corta y un tip.
-                Responde solo JSON.
+                Genera una guía turística y técnica EXHAUSTIVA para un {nacionalidad} en {ciudad_input}.
+                Debes incluir al menos 10 puntos de interés variados.
+                
+                Responde ÚNICAMENTE con un objeto JSON:
+                {{
+                    "consulado": "Info detallada del consulado",
+                    "hospital_nombre": "Nombre hospital principal",
+                    "hospital_info": "Dirección y contacto",
+                    "puntos_interes": [
+                        {{
+                            "nombre": "Nombre del lugar",
+                            "categoria": "Educación, Entretenimiento, Relax, Gastronomía o Aventura",
+                            "reseña": "Descripción atractiva",
+                            "ranking": "⭐ (del 1 al 5)",
+                            "horarios": "Info de apertura",
+                            "tip_viajero": "Un consejo único para este lugar"
+                        }}
+                    ]
+                }}
                 """
-                chat = client.chat.completions.create(
+                completion = client.chat.completions.create(
                     messages=[{"role": "user", "content": prompt}],
                     model="llama-3.3-70b-versatile",
                     response_format={"type": "json_object"}
                 )
-                guia_final = json.loads(chat.choices[0].message.content)
-                supabase.table("guias").upsert({"clave_busqueda": search_key, "datos_jsonb": guia_final}).execute()
+                guia_final = json.loads(completion.choices[0].message.content)
+                
+                # Guardar
+                supabase.table("guias").upsert({
+                    "clave_busqueda": search_key,
+                    "datos_jsonb": guia_final,
+                    "created_at": datetime.now().isoformat()
+                }).execute()
 
-        # 4. MOSTRAR RESULTADOS
+        # 3. MOSTRAR RESULTADOS FILTRADOS
         if guia_final:
-            st.divider()
-            # Info Crítica
+            # Sección Emergencias
             st.subheader("🚨 Información Esencial")
             c1, c2 = st.columns(2)
-            with c1: st.info(f"🏛️ **Consulado:** {guia_final.get('consulado')}")
-            with c2: st.warning(f"🏥 **Hospital:** {guia_final.get('hospital')}")
+            with c1:
+                st.info(f"🏛️ **Consulado:** {guia_final['consulado']}")
+            with c2:
+                st.error(f"🏥 **Hospital:** {guia_final['hospital_nombre']}\n\n{guia_final['hospital_info']}")
 
-            # Buscador/Filtro Visual
-            st.subheader(f"📍 Destacados en {ciudad}")
+            st.divider()
+            st.subheader(f"📍 Lo mejor de {ciudad_input.title()}")
+
+            # Filtrado por la elección del usuario
+            puntos = guia_final.get('puntos_interes', [])
             
-            puntos = guia_final.get('puntos', [])
-            
-            # Aquí es donde ocurre la magia del filtrado que querías
-            for p in puntos:
-                # Si el usuario eligió categorías, filtramos. Si no eligió nada, mostramos todo.
-                if not filtro_exp or p.get('categoria') in filtro_exp:
-                    with st.container():
-                        st.markdown(f"""
-                        <div class="card">
-                            <div style="display:flex; justify-content:space-between; align-items:center;">
-                                <h3 style="margin:0;">{p['nombre']}</h3>
-                                <span style="color:#ffb400; font-size:1.2rem;">{'⭐' * int(str(p.get('ranking','4'))[0])}</span>
-                            </div>
-                            <span class="tag">{p.get('categoria', 'General')}</span>
-                            <p style="margin-top:10px;">{p.get('descripcion', 'Sin descripción')}</p>
-                            <p style="font-size:0.9rem; color:#666;"><b>💡 Tip:</b> {p.get('tip', 'Disfrútalo.')}</p>
-                        </div>
-                        """, unsafe_allow_html=True)
-                        q_map = urllib.parse.quote(f"{p['nombre']} {ciudad}")
-                        st.link_button(f"Ver {p['nombre']} en Mapa", f"https://www.google.com/maps/search/?api=1&query={q_map}")
+            # Mostramos los puntos según la categoría elegida
+            for punto in puntos:
+                if not tipo_experiencia or punto['categoria'] in tipo_experiencia:
+                    with st.container(border=True):
+                        col_a, col_b = st.columns([3, 1])
+                        with col_a:
+                            st.markdown(f"### {punto['nombre']} {punto['ranking']}")
+                            st.caption(f"Categoría: {punto['categoria']}")
+                            st.write(punto['reseña'])
+                            st.info(f"💡 **Tip:** {punto['tip_viajero']}")
+                        with col_b:
+                            st.write(f"⏰ {punto['horarios']}")
+                            q = urllib.parse.quote(f"{punto['nombre']} {ciudad_input}")
+                            st.link_button("🗺️ Ver Mapa", f"https://www.google.com/maps/search/{q}")
