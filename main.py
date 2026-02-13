@@ -1,110 +1,140 @@
 import streamlit as st
 from groq import Groq
+from supabase import create_client, Client
 import json
+from datetime import datetime, timedelta
 import urllib.parse
 
+# 1. CONFIGURACIÓN DE PÁGINA
 st.set_page_config(page_title="SOS Passport AI", page_icon="🆘", layout="wide")
 
-client = Groq(api_key=st.secrets["GROQ_API_KEY"])
+# 2. CONEXIONES (Asegurate de que estos nombres coincidan con tus Secrets)
+try:
+    supabase: Client = create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
+    client = Groq(api_key=st.secrets["GROQ_API_KEY"])
+except Exception as e:
+    st.error("Error de conexión. Verifica tus Secrets en Streamlit.")
+    st.stop()
 
+# 3. INTERFAZ DE USUARIO
 st.title("🆘 SOS Passport AI")
+st.markdown("### Tu guía inteligente de asistencia al viajero")
 
-# ==========================================
-# CONFIGURACIÓN ABIERTA (Nacionalidad libre)
-# ==========================================
 col_pref1, col_pref2 = st.columns(2)
 with col_pref1:
-    # Ahora es un campo de texto abierto
-    nacionalidad = st.text_input("🌎 Tu Nacionalidad / Your Nationality", placeholder="Ej: Argentina, México, Italia...")
+    nacionalidad = st.text_input("🌎 Tu Nacionalidad", placeholder="Ej: Argentina")
 with col_pref2:
-    idioma = st.selectbox("🗣️ Idioma / Language", 
-                          ["Español", "English", "Português", "Français", "Italiano", "Deutsch"])
+    idioma = st.selectbox("🗣️ Idioma de la guía", ["Español", "English", "Português", "Français"])
 
 st.markdown("---")
 
-# BUSCADOR
-labels = {"Español": "Ciudad de destino", "English": "Destination city"}
-ciudad_input = st.text_input(labels.get(idioma, "Ciudad / City"), key="buscador")
+# 4. BUSCADOR
+ciudad_input = st.text_input("📍 Ciudad de destino", placeholder="Ej: Roma, Italia")
 
 if ciudad_input and nacionalidad:
-    if st.button("OK"):
-        with st.spinner("Generando guía personalizada..."):
-            try:
-                # El Prompt ahora toma cualquier nacionalidad escrita
-                prompt = f"""
-                Act as a travel safety expert. User nationality: {nacionalidad}. Language: {idioma}. City: {ciudad_input}.
-                Return JSON:
-                "consulado_info": "Description of the {nacionalidad} consulate in {ciudad_input}",
-                "consulado_google": "Exact name of {nacionalidad} consulate in {ciudad_input} for Google Maps",
-                "hospital_info": "Best hospital in {ciudad_input}",
-                "hospital_google": "Exact hospital name for Google Maps",
-                "transporte_link": "Official transport ticket URL",
-                "puntos_interes": [
+    # Clave única para la base de datos (todo en minúsculas para evitar duplicados)
+    search_key = f"{ciudad_input.lower()}-{nacionalidad.lower()}-{idioma.lower()}".strip()
+    
+    if st.button("Generar Guía Integral"):
+        guia_final = None
+        
+        # --- PASO A: BUSCAR EN SUPABASE ---
+        try:
+            # Buscamos si ya existe esta guía
+            query = supabase.table("guias").select("*").eq("clave_busqueda", search_key).execute()
+            
+            if query.data and len(query.data) > 0:
+                # Verificamos si la guía tiene menos de 30 días
+                fecha_creacion = datetime.fromisoformat(query.data[0]['created_at'].replace('Z', '+00:00'))
+                if datetime.now(fecha_creacion.tzinfo) - fecha_creacion < timedelta(days=30):
+                    guia_final = query.data[0]['datos_jsonb'] # <--- USAMOS EL NOMBRE DE TU FOTO
+                    st.info("⚡ Información recuperada de la base de datos (Ahorro de IA)")
+        except Exception as e:
+            st.warning(f"Aviso: No se pudo leer la base de datos, consultando a la IA directamente...")
+
+        # --- PASO B: SI NO ESTÁ EN LA BASE, PEDIR A GROQ ---
+        if not guia_final:
+            with st.spinner(f"Investigando sobre {ciudad_input} para un ciudadano {nacionalidad}..."):
+                try:
+                    prompt = f"""
+                    Genera una guía de asistencia técnica y turística para un ciudadano {nacionalidad} que se encuentra en {ciudad_input}.
+                    La respuesta DEBE ser un objeto JSON estrictamente formateado con el idioma {idioma}.
+                    
+                    Estructura del JSON:
                     {{
-                        "nombre": "Name",
-                        "nombre_google": "Exact name for Google Maps",
-                        "reseña": "Description",
-                        "precios": "Fees",
-                        "ticket_link": "URL",
-                        "horarios": "Hours",
-                        "como_llegar": "Transport"
+                        "consulado": "Dirección y contacto del consulado o embajada",
+                        "hospital": "Nombre y dirección del hospital principal",
+                        "hospital_nombre": "Solo el nombre del hospital para buscar en mapa",
+                        "transporte_link": "URL de la web oficial de transporte",
+                        "puntos_interes": [
+                            {{
+                                "nombre": "Nombre del lugar",
+                                "reseña": "Breve descripción",
+                                "precios": "Costos estimados",
+                                "ticket_link": "Link de compra o 'none'",
+                                "horarios": "Horas de apertura",
+                                "como_llegar": "Línea de metro o bus"
+                            }}
+                        ]
                     }}
-                ]
-                All text values in {idioma}.
-                """
-                
-                chat_completion = client.chat.completions.create(
-                    messages=[{"role": "user", "content": prompt}],
-                    model="llama-3.3-70b-versatile",
-                    response_format={"type": "json_object"}
-                )
-                
-                res = json.loads(chat_completion.choices[0].message.content)
-                
-                # Función para link de Google Maps de alta precisión
-                def get_map_url(place_name):
-                    query = urllib.parse.quote(f"{place_name} {ciudad_input}")
-                    return f"https://www.google.com/maps/search/?api=1&query={query}"
+                    """
+                    
+                    chat_completion = client.chat.completions.create(
+                        messages=[{"role": "user", "content": prompt}],
+                        model="llama-3.3-70b-versatile",
+                        response_format={"type": "json_object"}
+                    )
+                    
+                    guia_final = json.loads(chat_completion.choices[0].message.content)
+                    
+                    # --- PASO C: GUARDAR EN SUPABASE PARA EL FUTURO ---
+                    # Nota: Usamos datos_jsonb porque es como se llama en tu tabla
+                    supabase.table("guias").upsert({
+                        "clave_busqueda": search_key,
+                        "datos_jsonb": guia_final,
+                        "created_at": datetime.now().isoformat()
+                    }).execute()
+                    st.success("✅ Guía generada y guardada en la base de datos.")
+                    
+                except Exception as e:
+                    st.error(f"Hubo un error con la IA: {e}")
 
-                st.success(f"📍 {ciudad_input.upper()} ({nacionalidad.upper()} PASSPORT)")
+        # --- 5. MOSTRAR RESULTADOS SI TENEMOS GUÍA ---
+        if guia_final:
+            st.divider()
+            st.header(f"📍 Guía SOS: {ciudad_input.title()}")
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                with st.container(border=True):
+                    st.subheader(f"🏛️ Consulado de {nacionalidad}")
+                    st.write(guia_final.get('consulado', 'No disponible'))
+                    q_cons = urllib.parse.quote(f"consulado de {nacionalidad} en {ciudad_input}")
+                    st.link_button("🗺️ Ver Mapa", f"https://www.google.com/maps/search/?api=1&query={q_cons}")
 
-                # EMERGENCIAS
-                c1, c2 = st.columns(2)
-                with c1:
-                    with st.container(border=True):
-                        st.markdown(f"#### 🏛️ Consulado de {nacionalidad}")
-                        st.write(res['consulado_info'])
-                        st.link_button("📍 Ver Mapa", get_map_url(res['consulado_google']))
+            with col2:
+                with st.container(border=True):
+                    st.subheader("🏥 Hospital Recomendado")
+                    st.write(guia_final.get('hospital', 'No disponible'))
+                    q_hosp = urllib.parse.quote(f"{guia_final.get('hospital_nombre', 'Hospital')} {ciudad_input}")
+                    st.link_button("🚑 Emergencias Mapa", f"https://www.google.com/maps/search/?api=1&query={q_hosp}")
 
-                with c2:
-                    with st.container(border=True):
-                        st.markdown("#### 🏥 Salud")
-                        st.write(res['hospital_info'])
-                        st.link_button("🚑 Ver Mapa", get_map_url(res['hospital_google']))
+            st.subheader("🌟 Imperdibles y Logística")
+            for lugar in guia_final.get('puntos_interes', []):
+                with st.expander(f"📍 {lugar['nombre']}"):
+                    st.write(lugar['reseña'])
+                    c_l1, c_l2 = st.columns(2)
+                    with c_l1:
+                        st.write(f"💰 **Precios:** {lugar['precios']}")
+                        st.write(f"⏰ **Horarios:** {lugar['horarios']}")
+                    with c_l2:
+                        st.write(f"🚌 **Cómo llegar:** {lugar['como_llegar']}")
+                        if lugar['ticket_link'] != "none":
+                            st.link_button("🎟️ Comprar Entradas", lugar['ticket_link'])
+                    
+                    q_lugar = urllib.parse.quote(f"{lugar['nombre']} {ciudad_input}")
+                    st.link_button("🗺️ Ir al Mapa", f"https://www.google.com/maps/search/?api=1&query={q_lugar}")
 
-                # PUNTOS DE INTERÉS
-                st.subheader("🌟 Puntos de Interés")
-                for lugar in res['puntos_interes']:
-                    with st.expander(f"📍 {lugar['nombre']}"):
-                        st.write(lugar['reseña'])
-                        t1, t2 = st.columns(2)
-                        with t1:
-                            st.write(f"🎟️ **Costo:** {lugar['precios']}")
-                            st.write(f"🕒 **Horario:** {lugar['horarios']}")
-                        with t2:
-                            st.write(f"🚌 **Cómo llegar:** {lugar['como_llegar']}")
-                            if lugar['ticket_link'] and lugar['ticket_link'] != "none":
-                                st.link_button("🛒 Comprar Entradas", lugar['ticket_link'])
-                        
-                        st.link_button("🗺️ Cómo llegar (Maps)", get_map_url(lugar['nombre_google']))
-
-            except Exception as e:
-                st.error(f"Error: {e}")
-
-# GPS DE EMERGENCIA
 st.divider()
-if st.button("🆘 EMERGENCY GPS"):
-    q_hosp = urllib.parse.quote("hospital near me")
-    q_cons = urllib.parse.quote(f"consulate {nacionalidad} near me")
-    st.link_button("🏥 Hospital Near Me", f"https://www.google.com/maps/search/?api=1&query={q_hosp}")
-    st.link_button(f"🏛️ {nacionalidad} Consulate Near Me", f"https://www.google.com/maps/search/?api=1&query={q_cons}")
+st.caption("SOS Passport © 2026 - Tu asistente de viaje con IA")
