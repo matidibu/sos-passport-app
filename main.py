@@ -16,6 +16,7 @@ st.markdown("""
         box-shadow: 0px 10px 30px rgba(0, 131, 143, 0.1);
         margin-bottom: 25px; border-top: 8px solid #00acc1;
     }
+    .info-tag { background: #e0f7fa; padding: 5px 10px; border-radius: 10px; font-size: 0.9rem; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -24,13 +25,13 @@ try:
     supabase = create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
     client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 except:
-    st.error("Error de conexión. Revisá tus Secrets.")
+    st.error("Revisá la configuración de tus Secrets.")
     st.stop()
 
-# 3. INTERFAZ
 st.markdown('<h1 class="main-title">SOS Passport 🏖️</h1>', unsafe_allow_html=True)
 st.write("### Tu guía de confianza para explorar y descansar.")
 
+# 3. INTERFAZ DE BÚSQUEDA
 with st.container(border=True):
     c1, c2, c3 = st.columns(3)
     with c1: nac = st.text_input("🌎 Nacionalidad", value="Argentina")
@@ -39,7 +40,6 @@ with st.container(border=True):
 
 if st.button("¡EXPLORAR MI DESTINO!", use_container_width=True):
     if dest:
-        # Clave única por destino y nacionalidad
         search_key = f"{dest.lower().strip()}-{nac.lower().strip()}-{lang.lower()}"
         guia = None
         
@@ -49,13 +49,14 @@ if st.button("¡EXPLORAR MI DESTINO!", use_container_width=True):
         except: pass
         
         if not guia:
-            with st.spinner("Buscando los mejores lugares para vos..."):
+            with st.spinner("Buscando los mejores lugares..."):
                 prompt = f"""Genera una guía de viaje para un {nac} en {dest} en {lang}. 
-                Responde ÚNICAMENTE un JSON con:
-                'consulado': 'info',
-                'hospital': 'info',
-                'lista_lugares': [{{'nombre': '..', 'resenia': '..', 'horario': '..', 'precio': '..'}}]"""
-                
+                Responde EXCLUSIVAMENTE un JSON con esta estructura:
+                {{
+                    "consulado": "info",
+                    "hospital": "info",
+                    "puntos": [{{ "nombre": "Lugar", "resenia": "Breve descripción", "horario": "Info", "precio": "Info" }}]
+                }}"""
                 chat = client.chat.completions.create(
                     messages=[{"role": "user", "content": prompt}],
                     model="llama-3.3-70b-versatile",
@@ -66,46 +67,39 @@ if st.button("¡EXPLORAR MI DESTINO!", use_container_width=True):
 
         if guia:
             st.divider()
-            # SEGURIDAD (Lo que ya te funcionaba en la foto e7fa81)
+            # SECCIÓN SEGURIDAD (Foto e7fa81 - OK)
             st.subheader("🛡️ Seguridad y Salud")
-            col_s1, col_s2 = st.columns(2)
-            col_s1.info(f"🏛️ **Consulado:** {guia.get('consulado', guia.get('consulado_info', 'Consultar online'))}")
-            col_s2.success(f"🏥 **Hospital:** {guia.get('hospital', guia.get('hospital_info', 'Consultar online'))}")
+            cs1, cs2 = st.columns(2)
+            cs1.info(f"🏛️ **Consulado:** {guia.get('consulado', 'Consultar online')}")
+            cs2.success(f"🏥 **Hospital:** {guia.get('hospital', 'Consultar online')}")
 
             st.write("---")
             st.subheader(f"📍 Imperdibles en {dest.title()}")
             
-            # --- BUSCADOR INTELIGENTE DE PUNTOS ---
-            # Buscamos cualquier lista que tenga el JSON de la IA
-            puntos = []
-            for clave in ['lista_lugares', 'puntos', 'lugares', 'atracciones', 'items']:
-                if clave in guia and isinstance(guia[clave], list):
-                    puntos = guia[clave]
-                    break
-            
-            # Si no encontró ninguna de las anteriores, agarra la primera lista que vea
+            # Buscador de puntos (Flexible)
+            puntos = guia.get('puntos', [])
             if not puntos:
                 for v in guia.values():
                     if isinstance(v, list):
                         puntos = v
                         break
 
-            if puntos:
-                for i, p in enumerate(puntos):
-                    nombre = str(p.get('nombre', 'Lugar Turístico'))
-                    st.markdown(f"""
-                    <div class="punto-card">
-                        <h2 style="margin:0; color:#00838f;">{nombre}</h2>
-                        <p style="font-size:1.1rem; margin-top:10px;">{p.get('resenia', p.get('reseña', 'Sin descripción'))}</p>
-                        <p><b>⏰ Horario:</b> {p.get('horario', 'No info')} | <b>💰 Precio:</b> {p.get('precio', 'No info')}</p>
-                    </div>
-                    """, unsafe_allow_html=True)
-                    
-                    bm, bt = st.columns(2)
-                    with bm:
-                        q_url = urllib.parse.quote(f"{nombre} {dest}")
-                        st.link_button("🗺️ VER MAPA", f"https://www.google.com/maps/search/{q_url}", use_container_width=True, key=f"m_{i}")
-                    with bt:
-                        st.button("✨ Sugerido", disabled=True, use_container_width=True, key=f"s_{i}")
-            else:
-                st.warning("No se encontraron puntos. Probá escribiendo el destino de nuevo.")
+            for i, p in enumerate(puntos):
+                nombre_lugar = str(p.get('nombre', 'Lugar Turístico'))
+                st.markdown(f"""
+                <div class="punto-card">
+                    <h2 style="margin:0; color:#00838f;">{nombre_lugar}</h2>
+                    <p style="font-size:1.1rem; margin:10px 0;">{p.get('resenia', p.get('reseña', ''))}</p>
+                    <span class="info-tag">⏰ {p.get('horario', 'N/A')}</span>
+                    <span class="info-tag">💰 {p.get('precio', 'N/A')}</span>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                # BOTONES (Aquí corregimos el error de la foto e8025f)
+                b_map, b_extra = st.columns(2)
+                with b_map:
+                    # Usamos quote para asegurar que el link sea válido
+                    query = urllib.parse.quote(f"{nombre_lugar} {dest}")
+                    st.link_button("🗺️ VER EN MAPA", f"https://www.google.com/maps/search/?api=1&query={query}", use_container_width=True, key=f"m_{i}")
+                with b_extra:
+                    st.button("✨ RECOMENDADO", disabled=True, use_container_width=True, key=f"r_{i}")
