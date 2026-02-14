@@ -3,59 +3,67 @@ from groq import Groq
 from supabase import create_client, Client
 import json
 import urllib.parse
-import time
+import re
 
-# 1. CONFIGURACIÓN Y ESTILO BLINDADO
+# 1. ESTILO Y CONFIGURACIÓN
 st.set_page_config(page_title="SOS Passport", page_icon="✈️", layout="wide")
 
-def seguro(texto, default="Dato no disponible"): 
-    if not texto or str(texto).lower() == "none": return default
+def seguro(texto): 
+    if not texto or texto == "None": return "Información no disponible"
     return str(texto).strip().title()
 
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;800&display=swap');
-    .stApp { background: #f1f5f9; font-family: 'Inter', sans-serif; }
+    .stApp { background: #f8fafc; font-family: 'Inter', sans-serif; }
     
     .header-container {
         background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-        padding: 40px 20px; border-radius: 0 0 30px 30px;
-        color: white; text-align: center; margin-bottom: 30px;
+        padding: 50px 20px; border-radius: 0 0 30px 30px;
+        color: white; text-align: center; margin-bottom: 40px;
+        box-shadow: 0 10px 25px rgba(0,0,0,0.1);
     }
     
-    /* Contenedor de Imagen Dinámico */
-    .img-wrapper {
-        width: 100%; height: 400px; border-radius: 25px; overflow: hidden;
-        margin-bottom: 30px; box-shadow: 0 12px 24px rgba(0,0,0,0.15);
-        background: #cbd5e1;
-    }
-    .img-wrapper img { width: 100%; height: 100%; object-fit: cover; }
+    .header-container h1 { font-weight: 800; font-size: 3.2rem; letter-spacing: -1.5px; margin: 0; }
+    .header-container p { font-size: 1.1rem; opacity: 0.7; margin-top: 10px; }
 
-    .card-base {
-        background: white; padding: 25px; border-radius: 20px;
-        margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+    .resenia-box {
+        background: white; padding: 30px; border-radius: 20px; margin-bottom: 30px;
+        border-left: 10px solid #0ea5e9; box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+    }
+
+    .punto-card {
+        background: white; border-radius: 20px; padding: 25px; margin-bottom: 25px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.05); border-bottom: 5px solid #0ea5e9;
     }
     
-    .punto-item { border-left: 6px solid #0ea5e9; }
-    
-    .logistica-box {
-        background: #0f172a; color: white; padding: 40px;
-        border-radius: 30px; margin-top: 40px;
-    }
-    .grid-info {
-        display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 25px;
+    .info-relevante-box {
+        background: #0f172a; color: #f8fafc; padding: 50px; border-radius: 30px; margin-top: 50px;
     }
     
-    .btn-viaje {
+    .info-grid {
+        display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 35px;
+    }
+
+    .info-item h4 {
+        color: #38bdf8; border-bottom: 1px solid #334155;
+        padding-bottom: 10px; margin-bottom: 15px;
+        text-transform: uppercase; font-size: 0.8rem; letter-spacing: 1.2px;
+    }
+
+    .btn-action {
         display: inline-block; padding: 10px 18px; border-radius: 8px;
-        text-decoration: none; font-weight: 700; font-size: 0.8rem;
-        margin-top: 10px; margin-right: 8px; text-align: center;
+        text-decoration: none; font-size: 0.85rem; font-weight: 700;
+        margin-top: 15px; margin-right: 10px; text-align: center;
     }
-    .btn-map { background: #0ea5e9; color: white !important; }
-    .btn-tkt { background: #f59e0b; color: white !important; }
-    .btn-link-log { 
-        display: block; border: 1px solid #38bdf8; color: #38bdf8 !important;
-        text-align: center; padding: 8px; border-radius: 6px; margin-top: 10px;
+    
+    .btn-primary { background: #0ea5e9; color: white !important; }
+    .btn-secondary { background: #f59e0b; color: white !important; }
+    
+    .btn-link { 
+        display: block; background: #1e293b; color: #38bdf8 !important; 
+        border: 1px solid #38bdf8; font-size: 0.75rem; padding: 8px; 
+        border-radius: 6px; text-decoration: none; text-align: center; margin-top: 10px;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -64,96 +72,118 @@ st.markdown("""
 try:
     supabase = create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
     client = Groq(api_key=st.secrets["GROQ_API_KEY"])
-except:
-    st.error("Error de conexión. Verifica tus Secrets.")
+except Exception as e:
+    st.error(f"Error de conexión: {e}")
     st.stop()
 
-st.markdown('<div class="header-container"><h1>SOS PASSPORT ✈️</h1><p>Terminal de Logística Global</p></div>', unsafe_allow_html=True)
+st.markdown("""
+    <div class="header-container">
+        <h1>SOS PASSPORT ✈️</h1>
+        <p>Logística Global y Tickets Oficiales</p>
+    </div>
+    """, unsafe_allow_html=True)
 
-# 3. ENTRADA DE DATOS
+# 3. INTERFAZ
 c1, c2, c3 = st.columns(3)
 with c1: nac_in = st.text_input("🌎 Nacionalidad", value="Argentina")
-with c2: dest_raw = st.text_input("📍 Ciudad de Destino", placeholder="Ej: París, Francia")
+with c2: dest_raw = st.text_input("📍 Ciudad de Destino", placeholder="Ej: Madrid")
 with c3: lang = st.selectbox("🗣️ Idioma", ["Español", "English", "Português", "Italiano"])
 
-if st.button("SINCRONIZAR DESTINO", use_container_width=True):
-    if dest_raw:
-        destino = seguro(dest_raw)
-        nacionalidad = seguro(nac_in)
+nacionalidad = seguro(nac_in)
+destino = seguro(dest_raw)
+
+if st.button("GENERAR LOGÍSTICA COMPLETA", use_container_width=True):
+    if not dest_raw:
+        st.warning("Por favor, ingresa un destino.")
+    else:
         search_key = f"{destino.lower()}-{nacionalidad.lower()}-{lang.lower()}"
+        guia = None
         
-        # Cache de Supabase
-        res = supabase.table("guias").select("*").eq("clave_busqueda", search_key).execute()
-        guia = res.data[0]['datos_jsonb'] if res.data else None
+        try:
+            res = supabase.table("guias").select("*").eq("clave_busqueda", search_key).execute()
+            if res.data: guia = res.data[0]['datos_jsonb']
+        except: pass
         
         if not guia:
-            with st.spinner("Generando inteligencia de viaje..."):
-                prompt = f"""Genera un JSON para {nacionalidad} en {destino} ({lang}).
-                JSON: {{
-                    "resenia": "...",
-                    "puntos": [{{ "n": "Lugar", "d": "Info", "h": "Horas", "p": "Precio" }}],
-                    "cambio": "Zonas de cambio seguras",
-                    "hospital": "Centros médicos recomendados",
-                    "alojamiento": "Mejores barrios",
-                    "clima": "Resumen clima",
-                    "autos": "Rentadoras",
-                    "consulado": "Datos consulado"
-                }}"""
-                chat = client.chat.completions.create(messages=[{"role":"user","content":prompt}], model="llama-3.3-70b-versatile", response_format={"type":"json_object"})
-                guia = json.loads(chat.choices[0].message.content)
-                supabase.table("guias").upsert({"clave_busqueda": search_key, "datos_jsonb": guia}).execute()
+            with st.spinner("Conectando con servicios locales..."):
+                try:
+                    prompt = f"""Genera un JSON para un viajero {nacionalidad} en {destino}. Idioma: {lang}. 
+                    IMPORTANTE: No uses títulos como 'Clima:' dentro de los valores.
+                    JSON:
+                    {{
+                        "resenia": "Breve descripción",
+                        "puntos": [{{ "n": "Lugar", "d": "Info", "h": "Horas", "p": "Precio" }}],
+                        "cambio": "Datos casas cambio",
+                        "autos": "Rentadoras",
+                        "alojamiento": "Zonas Airbnb",
+                        "clima": "Pronóstico",
+                        "consulado": "Contacto",
+                        "hospital": "Salud"
+                    }}"""
+                    chat = client.chat.completions.create(messages=[{"role":"user","content":prompt}], model="llama-3.3-70b-versatile", response_format={"type":"json_object"})
+                    guia = json.loads(chat.choices[0].message.content)
+                    supabase.table("guias").upsert({"clave_busqueda": search_key, "datos_jsonb": guia}).execute()
+                except Exception as e:
+                    st.error("Error al generar datos. Reintenta.")
+                    st.stop()
 
         if guia:
-            # --- SOLUCIÓN IMAGEN: Forzado de refresco con ID dinámico ---
-            t = int(time.time())
-            img_query = urllib.parse.quote(f"landscape,city,{destino}")
-            st.markdown(f"""
-                <div class="img-wrapper">
-                    <img src="https://source.unsplash.com/featured/1200x500?landscape,city,{img_query}&sig={t}" 
-                    onerror="this.src='https://loremflickr.com/1200/500/city,landscape,{img_query}?random={t}'">
-                </div>
-            """, unsafe_allow_html=True)
+            st.image(f"https://loremflickr.com/1200/500/{urllib.parse.quote(destino)},city/all", use_container_width=True)
             
-            st.markdown(f'<div class="card-base"><h2>Explorando {destino}</h2><p>{guia.get("resenia")}</p></div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="resenia-box"><h2>Sobre {destino}</h2><p>{guia.get("resenia", "Sin reseña.")}</p></div>', unsafe_allow_html=True)
 
-            # --- SECCIÓN TICKETS ---
-            st.subheader("🎟️ Itinerario y Entradas Oficiales")
-            for p in guia.get('puntos', []):
-                nombre = seguro(p.get('n'))
-                q_map = urllib.parse.quote(f"{nombre} {destino}")
-                st.markdown(f"""
-                <div class="card-base punto-item">
-                    <h4>{nombre}</h4>
-                    <p>{p.get('d')}</p>
-                    <small><b>⏰ Horario:</b> {p.get('h')} | <b>💰 Costo:</b> {p.get('p')}</small><br>
-                    <a href="https://www.google.com/maps/search/?api=1&query={q_map}" target="_blank" class="btn-viaje btn-map">🗺️ MAPA</a>
-                    <a href="https://www.google.com/search?q=official+tickets+{q_map}" target="_blank" class="btn-viaje btn-tkt">🎟️ TICKETS</a>
-                </div>
-                """, unsafe_allow_html=True)
+            # C. PUNTOS (Con validación de lista)
+            st.subheader("📍 Itinerario Sugerido")
+            puntos = guia.get('puntos', [])
+            if isinstance(puntos, list):
+                for p in puntos:
+                    n_p = seguro(p.get('n'))
+                    link_mapa = f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote(f'{n_p} {destino}')}"
+                    link_tkt = f"https://www.google.com/search?q=official+tickets+{urllib.parse.quote(f'{n_p} {destino}')}"
+                    st.markdown(f"""
+                    <div class="punto-card">
+                        <h3>{n_p}</h3>
+                        <p>{p.get('d', '')}</p>
+                        <small><b>⏰ Horario:</b> {p.get('h', 'Verificar')} | <b>💰 Precio:</b> {p.get('p', 'Verificar')}</small><br>
+                        <a href="{link_mapa}" target="_blank" class="btn-action btn-primary">🗺️ MAPA</a>
+                        <a href="{link_tkt}" target="_blank" class="btn-action btn-secondary">🎟️ TICKETS</a>
+                    </div>
+                    """, unsafe_allow_html=True)
 
-            # --- SECCIÓN LOGÍSTICA (Hospital y Cambio restaurados y fijos) ---
+            # D. LOGÍSTICA
             st.markdown(f"""
-            <div class="logistica-box">
-                <h2 style="color:white; text-align:center; margin-bottom:30px;">📊 Datos Críticos de Logística</h2>
-                <div class="grid-info">
-                    <div class="info-card">
-                        <h4 style="color:#38bdf8;">💰 Casas de Cambio</h4>
-                        <p>{guia.get('cambio')}</p>
-                        <a href="https://www.google.com/maps/search/currency+exchange+{urllib.parse.quote(destino)}" target="_blank" class="btn-link-log">VER EN MAPA</a>
+            <div class="info-relevante-box">
+                <h2 style="color:white; margin-bottom:40px; text-align:center;">📊 Logística</h2>
+                <div class="info-grid">
+                    <div class="info-item">
+                        <h4>🏨 Alojamiento</h4>
+                        <p>{guia.get('alojamiento', 'Consultar Airbnb')}</p>
+                        <a href="https://www.airbnb.com/s/{urllib.parse.quote(destino)}/homes" target="_blank" class="btn-link">🔗 IR A AIRBNB</a>
                     </div>
-                    <div class="info-card">
-                        <h4 style="color:#38bdf8;">🏥 Hospitales</h4>
-                        <p>{guia.get('hospital')}</p>
-                        <a href="https://www.google.com/maps/search/hospital+{urllib.parse.quote(destino)}" target="_blank" class="btn-link-log">CENTROS MÉDICOS</a>
+                    <div class="info-item">
+                        <h4>🚗 Renta de Autos</h4>
+                        <p>{guia.get('autos', 'Consultar Rentadoras')}</p>
+                        <a href="https://www.rentalcars.com/search-results?locationName={urllib.parse.quote(destino)}" target="_blank" class="btn-link">🔗 BUSCAR RENTADORAS</a>
                     </div>
-                    <div class="info-card">
-                        <h4 style="color:#38bdf8;">🏛️ Consulado ({nacionalidad})</h4>
-                        <p>{guia.get('consulado')}</p>
-                        <a href="https://www.google.com/search?q=consulado+{urllib.parse.quote(nacionalidad)}+en+{urllib.parse.quote(destino)}" target="_blank" class="btn-link-log">SITIO OFICIAL</a>
+                    <div class="info-item">
+                        <h4>💰 Casas de Cambio</h4>
+                        <p>{guia.get('cambio', 'Consultar mapas')}</p>
+                        <a href="https://www.google.com/maps/search/currency+exchange+{urllib.parse.quote(destino)}" target="_blank" class="btn-link">🔗 VER UBICACIONES</a>
                     </div>
-                    <div class="info-card">
-                        <h4 style="color:#38bdf8;">☀️ Clima</h4>
-                        <p>{guia.get('clima')}</p>
+                    <div class="info-item">
+                        <h4>☀️ Clima</h4>
+                        <p>{guia.get('clima', 'Consultar pronóstico')}</p>
+                        <a href="https://www.google.com/search?q=weather+{urllib.parse.quote(destino)}" target="_blank" class="btn-link">🔗 VER DETALLE</a>
+                    </div>
+                    <div class="info-item">
+                        <h4>🏛️ Consulado</h4>
+                        <p>{guia.get('consulado', 'Consultar cancillería')}</p>
+                        <a href="https://www.google.com/search?q=consulado+{urllib.parse.quote(nacionalidad)}+en+{urllib.parse.quote(destino)}" target="_blank" class="btn-link">🔗 WEB OFICIAL</a>
+                    </div>
+                    <div class="info-item">
+                        <h4>🏥 Salud</h4>
+                        <p>{guia.get('hospital', 'Consultar centros')}</p>
+                        <a href="https://www.google.com/maps/search/hospital+{urllib.parse.quote(destino)}" target="_blank" class="btn-link">🔗 HOSPITALES CERCA</a>
                     </div>
                 </div>
             </div>
