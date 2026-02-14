@@ -4,35 +4,31 @@ from supabase import create_client, Client
 import json
 import urllib.parse
 
-# 1. ESTILO DINÁMICO SEGÚN DESTINO
+# 1. ESTILO VIBRANTE
 st.set_page_config(page_title="SOS Passport", page_icon="🏖️", layout="wide")
 
-# Inicializar destino en sesión para el color
-if "last_dest" not in st.session_state:
-    st.session_state.last_dest = ""
+if "dest" not in st.session_state: st.session_state.dest = ""
 
+# Color dinámico
 bg_color = "#f0faff"
-d = st.session_state.last_dest.lower()
-if any(x in d for x in ["cabo", "africa", "safari", "egipto"]): bg_color = "#fff3e0" 
-elif any(x in d for x in ["paris", "londres", "europa", "roma"]): bg_color = "#f5f5f5"
-elif any(x in d for x in ["brasil", "caribe", "asia", "tailandia"]): bg_color = "#e8f5e9"
+d = st.session_state.dest.lower()
+if any(x in d for x in ["cabo", "africa", "mexico", "amalfi", "costa"]): bg_color = "#fff3e0"
+elif any(x in d for x in ["paris", "londres", "europa"]): bg_color = "#f5f5f5"
 
 st.markdown(f"""
     <style>
     .stApp {{ background: {bg_color}; transition: background 0.8s ease; }}
     .header-container {{
         background: linear-gradient(90deg, #00838f, #00acc1);
-        padding: 40px; border-radius: 25px; color: white; text-align: center; margin-bottom: 30px;
+        padding: 40px; border-radius: 25px; color: white; text-align: center; margin-bottom: 20px;
     }}
     .resenia-box {{
-        background: white; padding: 30px; border-radius: 20px;
-        margin-bottom: 30px; border-left: 10px solid #ff9800;
-        box-shadow: 0 10px 25px rgba(0,0,0,0.05);
+        background: white; padding: 30px; border-radius: 20px; margin-bottom: 30px;
+        border-left: 10px solid #ff9800; box-shadow: 0 10px 25px rgba(0,0,0,0.05);
     }}
     .punto-card {{
-        background: white; border-radius: 20px; padding: 25px;
-        box-shadow: 0 8px 20px rgba(0,0,0,0.05); margin-bottom: 20px;
-        border-bottom: 6px solid #00acc1;
+        background: white; border-radius: 20px; padding: 25px; margin-bottom: 20px;
+        box-shadow: 0 8px 20px rgba(0,0,0,0.05); border-bottom: 6px solid #00acc1;
     }}
     .info-relevante-box {{
         background: #102027; color: #ffffff; padding: 40px;
@@ -55,60 +51,50 @@ except:
     st.error("Error en Secrets.")
     st.stop()
 
-st.markdown('<div class="header-container"><h1>SOS Passport 🏖️</h1><p>Tu guía inteligente de viaje</p></div>', unsafe_allow_html=True)
+st.markdown('<div class="header-container"><h1>SOS Passport 🏖️</h1><p>Tu guía inteligente para explorar el mundo</p></div>', unsafe_allow_html=True)
 
-# 3. INTERFAZ
-with st.container():
-    c1, c2, c3 = st.columns(3)
-    with c1: nac = st.text_input("🌎 Nacionalidad", value="Argentina")
-    with c2: dest = st.text_input("📍 Destino", placeholder="Ej: Ciudad del Cabo")
-    with c3: lang = st.selectbox("🗣️ Idioma", ["Español", "English", "Português", "Italiano"])
+# 3. INTERFAZ (Sin Form para respuesta inmediata)
+c1, c2, c3 = st.columns(3)
+with c1: nac = st.text_input("🌎 Nacionalidad", value="Argentina")
+with c2: dest_input = st.text_input("📍 Destino", placeholder="Ej: Costa Amalfitana", key="user_dest")
+with c3: lang = st.selectbox("🗣️ Idioma", ["Español", "English", "Português", "Italiano"])
 
-if st.button("¡EXPLORAR MI DESTINO!", use_container_width=True):
-    if dest:
-        st.session_state.last_dest = dest
-        search_key = f"{dest.lower().strip()}-{nac.lower().strip()}-{lang.lower()}"
+# El disparador es el botón, pero el flujo es más directo ahora
+if st.button("¡EXPLORAR MI DESTINO!", use_container_width=True) or (dest_input and dest_input != st.session_state.dest):
+    if dest_input:
+        st.session_state.dest = dest_input
+        search_key = f"{dest_input.lower().strip()}-{nac.lower().strip()}-{lang.lower()}"
         guia = None
         
+        # Consultar base de datos
         try:
             res = supabase.table("guias").select("*").eq("clave_busqueda", search_key).execute()
             if res.data: guia = res.data[0]['datos_jsonb']
         except: pass
         
         if not guia:
-            with st.spinner(f"Analizando {dest}..."):
-                # PROMPT REFORZADO PARA EVITAR ERRORES DE JSON
-                prompt = f"""Genera un JSON estrictamente válido para un viajero {nac} en {dest} en {lang}.
-                Estructura:
-                {{
-                    "resenia_corta": "Texto breve",
-                    "puntos": [{{ "nombre": "Lugar", "resenia": "Info", "horario": "Info", "precio": "Info", "url_ticket": "link" }}],
-                    "finanzas": {{ "cambio_local_usd": "1 USD = ?", "cambio_nacional_usd": "1 USD = ?" }},
-                    "clima": "Pronóstico 7 días",
-                    "consulado": "info",
-                    "hospital": "info"
-                }}"""
-                
-                chat = client.chat.completions.create(
-                    messages=[{"role": "user", "content": prompt}],
-                    model="llama-3.3-70b-versatile",
-                    response_format={"type": "json_object"}
-                )
+            with st.spinner(f"Diseñando tu viaje a {dest_input}..."):
                 try:
+                    prompt = f"Genera JSON para viajero {nac} en {dest_input} en {lang}: resenia_corta, puntos (nombre, resenia, horario, precio, url_ticket), finanzas (cambio_local_usd, cambio_nacional_usd), clima, consulado, hospital."
+                    chat = client.chat.completions.create(
+                        messages=[{"role": "user", "content": prompt}],
+                        model="llama-3.3-70b-versatile",
+                        response_format={"type": "json_object"}
+                    )
                     guia = json.loads(chat.choices[0].message.content)
                     supabase.table("guias").upsert({"clave_busqueda": search_key, "datos_jsonb": guia}).execute()
                 except Exception as e:
-                    st.error("Hubo un problema al procesar los datos. Por favor, intenta de nuevo.")
+                    st.error(f"La región es muy amplia. Intentá con una ciudad específica (ej: Positano) si esto falla.")
                     st.stop()
 
         if guia:
             # A. FOTO Y RESEÑA
-            img_dest = urllib.parse.quote(dest)
-            st.image(f"https://loremflickr.com/1200/500/{img_dest},city/all", use_container_width=True)
-            st.markdown(f'<div class="resenia-box"><h2>Sobre {dest}</h2><p>{guia.get("resenia_corta")}</p></div>', unsafe_allow_html=True)
+            img_url = f"https://loremflickr.com/1200/500/{urllib.parse.quote(dest_input)},landscape/all"
+            st.image(img_url, use_container_width=True)
+            st.markdown(f'<div class="resenia-box"><h2>Sobre {dest_input}</h2><p style="font-size:1.1rem;">{guia.get("resenia_corta")}</p></div>', unsafe_allow_html=True)
 
-            # B. PUNTOS IMPERDIBLES
-            st.subheader(f"📍 Imperdibles en {dest}")
+            # B. PUNTOS
+            st.subheader(f"📍 Imperdibles Seleccionados")
             puntos = guia.get('puntos', [])
             for p in puntos:
                 n = p.get('nombre', 'Lugar')
@@ -121,9 +107,11 @@ if st.button("¡EXPLORAR MI DESTINO!", use_container_width=True):
                 st.markdown(f"""
                 <div class="punto-card">
                     <h3>{n}</h3>
-                    <p>{p.get('resenia', '')}</p>
-                    <small>⏰ {p.get('horario')} | 💰 {p.get('precio')}</small><br>
-                    <a href="https://www.google.com/maps/search/?api=1&query={urllib.parse.quote(n + ' ' + dest)}" target="_blank" class="btn-action btn-map">🗺️ MAPA</a>
+                    <p>{p.get('resenia')}</p>
+                    <span style="background:#e0f7fa; padding:5px 10px; border-radius:8px; font-size:0.8rem; font-weight:bold; color:#006064;">⏰ {p.get('horario')}</span>
+                    <span style="background:#f1f8e9; padding:5px 10px; border-radius:8px; font-size:0.8rem; font-weight:bold; color:#2e7d32; margin-left:10px;">💰 {p.get('precio')}</span>
+                    <br>
+                    <a href="https://www.google.com/maps/search/?api=1&query={urllib.parse.quote(n + ' ' + dest_input)}" target="_blank" class="btn-action btn-map">🗺️ MAPA</a>
                     {btn_tkt}
                 </div>
                 """, unsafe_allow_html=True)
@@ -134,23 +122,19 @@ if st.button("¡EXPLORAR MI DESTINO!", use_container_width=True):
                 <h2 style="color:#00acc1">📊 Información Relevante</h2>
                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px;">
                     <div>
-                        <h4 style="color:#ff9800">💰 Moneda (USD)</h4>
-                        <p><b>{dest}:</b> {guia.get('finanzas', {}).get('cambio_local_usd', 'Consultar')}</p>
-                        <p><b>{nac}:</b> {guia.get('finanzas', {}).get('cambio_nacional_usd', 'Consultar')}</p>
+                        <h4 style="color:#ff9800">💰 Moneda (vs USD)</h4>
+                        <p><b>{dest_input}:</b> {guia.get('finanzas', {}).get('cambio_local_usd')}</p>
+                        <p><b>{nac}:</b> {guia.get('finanzas', {}).get('cambio_nacional_usd')}</p>
                     </div>
                     <div>
                         <h4 style="color:#ff9800">☀️ Clima</h4>
-                        <p>{guia.get('clima', 'No disponible')}</p>
+                        <p>{guia.get('clima')}</p>
                     </div>
                     <div>
-                        <h4 style="color:#ff9800">🏛️ Consulado</h4>
-                        <p>{guia.get('consulado', 'Ver online')}</p>
-                    </div>
-                    <div>
-                        <h4 style="color:#ff9800">🏥 Hospital</h4>
-                        <p>{guia.get('hospital', 'Ver online')}</p>
+                        <h4 style="color:#ff9800">🏛️ Consulado e Higiene</h4>
+                        <p><b>Asistencia:</b> {guia.get('consulado')}</p>
+                        <p><b>Hospital:</b> {guia.get('hospital')}</p>
                     </div>
                 </div>
             </div>
             """, unsafe_allow_html=True)
-            st.rerun() # Para actualizar el color de fondo inmediatamente
