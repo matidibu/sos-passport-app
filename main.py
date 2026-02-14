@@ -3,11 +3,19 @@ from groq import Groq
 from supabase import create_client, Client
 import json
 import urllib.parse
+import re
+import random
 
 # 1. ESTILO Y CONFIGURACIÓN
 st.set_page_config(page_title="SOS Passport", page_icon="🏖️", layout="wide")
 
-if "dest" not in st.session_state: st.session_state.dest = ""
+def limpiar_cambio(texto):
+    """Elimina repeticiones de '1 USD =' o símbolos para evitar el tartamudeo visual"""
+    texto = str(texto)
+    # Elimina frases como '1 USD =', '1 USD = ', 'USD', '$'
+    texto = re.sub(r'1\s*USD\s*=\s*', '', texto, flags=re.IGNORECASE)
+    texto = texto.replace('$', '').strip()
+    return texto
 
 st.markdown(f"""
     <style>
@@ -28,19 +36,13 @@ st.markdown(f"""
         background: #0d1b2a; color: #ffffff; padding: 40px;
         border-radius: 20px; margin-top: 40px; border-top: 8px solid #ff9800;
     }}
-    .currency-label {{ color: #b0bec5; font-size: 0.9rem; margin-bottom: 2px; }}
-    .currency-val {{ color: #00e5ff; font-weight: 800; font-size: 1.5rem; margin-bottom: 15px; display: block; }}
+    .currency-val {{ color: #00e5ff; font-weight: 800; font-size: 1.6rem; display: block; }}
     .disclaimer {{
         margin-top: 30px; padding: 15px; border-radius: 10px;
         background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1);
-        font-size: 0.85rem; color: #b0bec5; line-height: 1.4;
+        font-size: 0.85rem; color: #b0bec5;
     }}
-    .btn-action {{
-        display: inline-block; padding: 12px 20px; border-radius: 10px;
-        text-decoration: none; font-weight: 700; margin-top: 15px; margin-right: 10px; text-align: center;
-    }}
-    .btn-map {{ background: #00acc1; color: white !important; }}
-    .btn-tkt {{ background: #ff9800; color: white !important; }}
+    .img-main {{ width:100%; border-radius:20px; height: 450px; object-fit: cover; margin-bottom: 25px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); }}
     </style>
     """, unsafe_allow_html=True)
 
@@ -52,17 +54,16 @@ except:
     st.error("Error en las credenciales (Secrets).")
     st.stop()
 
-st.markdown('<div class="header-container"><h1>SOS Passport 🏖️</h1><p>Tu guía de viaje inteligente y precisa</p></div>', unsafe_allow_html=True)
+st.markdown('<div class="header-container"><h1>SOS Passport 🏖️</h1><p>Tu inteligencia de viaje sin errores</p></div>', unsafe_allow_html=True)
 
 # 3. INTERFAZ
 c1, c2, c3 = st.columns(3)
-with c1: nac = st.text_input("🌎 Tu Nacionalidad", value="Argentina")
-with c2: dest_input = st.text_input("📍 Ciudad de Destino", placeholder="Ej: Valencia, España", key="user_dest")
+with c1: nac = st.text_input("🌎 Nacionalidad", value="Argentina")
+with c2: dest_input = st.text_input("📍 Ciudad de Destino", placeholder="Ej: Tel Aviv")
 with c3: lang = st.selectbox("🗣️ Idioma", ["Español", "English", "Português", "Italiano"])
 
 if st.button("¡EXPLORAR MI DESTINO!", use_container_width=True):
     if dest_input:
-        st.session_state.dest = dest_input
         search_key = f"{dest_input.lower().strip()}-{nac.lower().strip()}-{lang.lower()}"
         guia = None
         
@@ -72,84 +73,76 @@ if st.button("¡EXPLORAR MI DESTINO!", use_container_width=True):
         except: pass
         
         if not guia:
-            with st.spinner(f"Sincronizando datos de {dest_input}..."):
-                prompt = f"""Genera un JSON estrictamente válido para un viajero de nacionalidad {nac} que visita {dest_input}. Idioma: {lang}.
-                INSTRUCCIONES FINANCIERAS:
-                1. Identifica las monedas de ambos países.
-                2. Busca la cotización real a Feb 2026 frente al USD. (Para ARS usar ~1400).
-                3. Responde SOLO el valor (ej: "1400 ARS" o "0.92 EUR"). NO repitas "1 USD =".
-                
-                ESTRUCTURA JSON:
+            with st.spinner(f"Sincronizando datos reales para {dest_input}..."):
+                prompt = f"""Genera un JSON para viajero {nac} en {dest_input}. Idioma: {lang}.
+                IMPORTANTE: Estamos en Feb 2026. 1 USD en Argentina son aprox 1420 ARS. 
+                Responde solo el número y moneda en los campos de cambio.
                 {{
-                    "resenia_ciudad": "Texto descriptivo",
-                    "puntos_imperdibles": [{{ "nombre": "Nombre", "descripcion": "Info", "horario": "Horas", "precio": "Valor", "url": "url" }}],
-                    "moneda_destino_nombre": "Moneda local",
-                    "cambio_destino_usd": "Valor final",
-                    "moneda_usuario_nombre": "Tu moneda",
-                    "cambio_usuario_usd": "Valor final",
-                    "pronostico_7_dias": "Clima",
-                    "datos_consulado": "Contacto",
-                    "datos_hospital": "Dirección"
+                    "resenia": "Texto",
+                    "puntos": [{{ "nombre": "Lugar", "desc": "Info", "h": "Horas", "p": "Precio" }}],
+                    "m_dest": "Nombre moneda destino",
+                    "c_dest": "Solo el numero y sigla",
+                    "m_nac": "Nombre moneda {nac}",
+                    "c_nac": "Solo el numero y sigla",
+                    "clima": "Resumen 7 días",
+                    "consulado": "Info",
+                    "hospital": "Info"
                 }}"""
-                
-                chat = client.chat.completions.create(
-                    messages=[{"role": "user", "content": prompt}],
-                    model="llama-3.3-70b-versatile",
-                    response_format={"type": "json_object"}
-                )
+                chat = client.chat.completions.create(messages=[{"role":"user","content":prompt}], model="llama-3.3-70b-versatile", response_format={"type":"json_object"})
                 guia = json.loads(chat.choices[0].message.content)
                 supabase.table("guias").upsert({"clave_busqueda": search_key, "datos_jsonb": guia}).execute()
 
         if guia:
-            # A. IMAGEN
-            img_query = urllib.parse.quote(dest_input)
-            st.markdown(f'<img src="https://loremflickr.com/1200/500/{img_query},city/all" style="width:100%; border-radius:15px; margin-bottom:20px;">', unsafe_allow_html=True)
+            # A. IMAGEN (Unsplash con Cache Buster para que no falle)
+            img_id = random.randint(1, 1000)
+            img_url = f"https://images.unsplash.com/photo-1502602898657-3e91760cbb34?auto=format&fit=crop&w=1200&q=80" # Default
+            search_slug = urllib.parse.quote(dest_input)
+            st.markdown(f'<img src="https://source.unsplash.com/1600x900/?{search_slug},landmark&sig={img_id}" class="img-main">', unsafe_allow_html=True)
             
             # B. RESEÑA
-            st.markdown(f'<div class="resenia-box"><h2>Sobre {dest_input}</h2><p>{guia.get("resenia_ciudad")}</p></div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="resenia-box"><h2>Sobre {dest_input}</h2><p>{guia.get("resenia")}</p></div>', unsafe_allow_html=True)
 
             # C. PUNTOS
-            st.subheader("📍 Lugares que no te puedes perder")
-            for p in guia.get('puntos_imperdibles', []):
-                nombre_p = p.get('nombre', 'Lugar')
-                desc_p = str(p.get('descripcion', '')).replace('Descripción:', '').replace('descripcion:', '')
+            st.subheader("📍 Imperdibles")
+            for p in guia.get('puntos', []):
                 st.markdown(f"""
                 <div class="punto-card">
-                    <h3>{nombre_p}</h3>
-                    <p>{desc_p}</p>
-                    <small><b>⏰ Horario:</b> {p.get('horario')} | <b>💰 Precio:</b> {p.get('precio')}</small><br>
-                    <a href="https://www.google.com/maps/search/?api=1&query={urllib.parse.quote(nombre_p + ' ' + dest_input)}" target="_blank" class="btn-action btn-map">🗺️ MAPA</a>
-                    <a href="https://www.google.com/search?q=tickets+official+{urllib.parse.quote(nombre_p)}" target="_blank" class="btn-action btn-tkt">🎟️ TICKETS</a>
+                    <h3>{p.get('nombre')}</h3>
+                    <p>{p.get('desc')}</p>
+                    <small><b>⏰ Horario:</b> {p.get('h')} | <b>💰 Precio:</b> {p.get('p')}</small><br>
+                    <a href="https://www.google.com/maps/search/?api=1&query={urllib.parse.quote(p.get('nombre') + ' ' + dest_input)}" target="_blank" style="color:#00acc1; font-weight:bold; text-decoration:none;">🗺️ VER EN MAPA</a>
                 </div>
                 """, unsafe_allow_html=True)
 
             # D. INFORMACIÓN RELEVANTE
+            # Limpiamos los datos de la moneda antes de mostrar
+            cambio_d = limpiar_cambio(guia.get('c_dest'))
+            cambio_n = limpiar_cambio(guia.get('c_nac'))
+
             st.markdown(f"""
             <div class="info-relevante-box">
                 <h2 style="color:#00acc1; margin-bottom:30px;">📊 Información Relevante</h2>
                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 30px;">
                     <div>
-                        <h4 style="color:#ff9800; margin-bottom:15px;">💰 Tipo de Cambio (vs 1 USD)</h4>
-                        <p class="currency-label">Moneda en {dest_input} ({guia.get('moneda_destino_nombre')}):</p>
-                        <span class="currency-val">1 USD = {guia.get('cambio_destino_usd')}</span>
-                        <hr style="opacity:0.1; margin: 15px 0;">
-                        <p class="currency-label">Tu Moneda ({guia.get('moneda_usuario_nombre')}):</p>
-                        <span class="currency-val">1 USD = {guia.get('cambio_usuario_usd')}</span>
-                    </div>
-                    <div>
-                        <h4 style="color:#ff9800; margin-bottom:15px;">☀️ Clima (7 días)</h4>
-                        <p>{guia.get('pronostico_7_dias')}</p>
-                    </div>
-                    <div>
-                        <h4 style="color:#ff9800; margin-bottom:15px;">🏛️ Seguridad y Salud</h4>
-                        <p><b>Consulado:</b><br>{guia.get('datos_consulado')}</p>
+                        <h4 style="color:#ff9800;">💰 Tipo de Cambio</h4>
+                        <p style="color:#b0bec5; margin-bottom:2px;">1 USD en {dest_input} ({guia.get('m_dest')}):</p>
+                        <span class="currency-val">1 USD = {cambio_d}</span>
                         <br>
-                        <p><b>Hospital:</b><br>{guia.get('datos_hospital')}</p>
+                        <p style="color:#b0bec5; margin-bottom:2px;">1 USD para vos ({guia.get('m_nac')}):</p>
+                        <span class="currency-val">1 USD = {cambio_n}</span>
+                    </div>
+                    <div>
+                        <h4 style="color:#ff9800;">☀️ Clima (7 días)</h4>
+                        <p>{guia.get('clima')}</p>
+                    </div>
+                    <div>
+                        <h4 style="color:#ff9800;">🏛️ Seguridad y Salud</h4>
+                        <p><b>Consulado:</b> {guia.get('consulado')}</p>
+                        <p><b>Hospital:</b> {guia.get('hospital')}</p>
                     </div>
                 </div>
                 <div class="disclaimer">
-                    <b>Nota:</b> Datos a Feb 2026 obtenidos de fuentes públicas. <br>
-                    <i>SOS Passport es una herramienta informativa. No nos responsabilizamos por variaciones cambiarias o climáticas. Recomendamos verificar datos críticos en canales oficiales.</i>
+                    <b>Nota:</b> Información actualizada a Feb 2026. SOS Passport es una guía orientativa y no se responsabiliza por cambios en las cotizaciones o datos brindados.
                 </div>
             </div>
             """, unsafe_allow_html=True)
