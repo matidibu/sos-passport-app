@@ -3,9 +3,8 @@ from groq import Groq
 from supabase import create_client, Client
 import json
 import urllib.parse
-import re
 
-# 1. CONFIGURACIÓN Y ESTILO "TRAVELER"
+# 1. CONFIGURACIÓN Y ESTILO
 st.set_page_config(page_title="SOS Passport", page_icon="✈️", layout="wide")
 
 def seguro(texto): 
@@ -66,7 +65,7 @@ st.markdown("""
 try:
     supabase = create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
     client = Groq(api_key=st.secrets["GROQ_API_KEY"])
-except Exception as e:
+except:
     st.error("Error en las credenciales (Secrets).")
     st.stop()
 
@@ -100,57 +99,55 @@ if st.button("GENERAR LOGÍSTICA COMPLETA", use_container_width=True):
         
         if not guia:
             with st.spinner(f"Analizando {destino}..."):
-                try:
-                    prompt = f"""Genera un JSON para un viajero {nacionalidad} en {destino}. Idioma: {lang}. 
-                    REGLAS: Sin títulos como 'Clima:' dentro de los valores. 
-                    JSON:
-                    {{
-                        "resenia": "Breve descripción profesional",
-                        "puntos": [{{ "n": "Nombre Lugar", "d": "Detalle", "h": "Horas", "p": "Costo" }}],
-                        "cambio": "Datos casas cambio",
-                        "autos": "Rentadoras",
-                        "alojamiento": "Airbnb y Hoteles",
-                        "clima": "Reporte 7 días",
-                        "consulado": "Contacto",
-                        "hospital": "Salud"
-                    }}"""
-                    chat = client.chat.completions.create(messages=[{"role":"user","content":prompt}], model="llama-3.3-70b-versatile", response_format={"type":"json_object"})
-                    guia = json.loads(chat.choices[0].message.content)
-                    supabase.table("guias").upsert({"clave_busqueda": search_key, "datos_jsonb": guia}).execute()
-                except:
-                    st.error("Error al conectar con la IA. Reintenta.")
-                    st.stop()
+                prompt = f"""Genera un JSON para un viajero {nacionalidad} en {destino}. Idioma: {lang}. 
+                JSON:
+                {{
+                    "resenia": "Breve descripción profesional",
+                    "puntos": [{{ "n": "Lugar", "d": "Detalle", "h": "Horas", "p": "Precio" }}],
+                    "cambio": "Datos casas cambio",
+                    "autos": "Rentadoras",
+                    "alojamiento": "Airbnb y Hoteles",
+                    "clima": "Reporte 7 días",
+                    "consulado": "Contacto",
+                    "hospital": "Salud"
+                }}"""
+                chat = client.chat.completions.create(messages=[{"role":"user","content":prompt}], model="llama-3.3-70b-versatile", response_format={"type":"json_object"})
+                guia = json.loads(chat.choices[0].message.content)
+                supabase.table("guias").upsert({"clave_busqueda": search_key, "datos_jsonb": guia}).execute()
 
         if guia:
-            # A. IMAGEN MEJORADA (Uso de etiquetas específicas de ciudad y paisaje)
-            img_query = urllib.parse.quote(f"landscape city view of {destino}")
-            st.image(f"https://loremflickr.com/1200/500/{img_query}", use_container_width=True, caption=f"Paisaje urbano de {destino}")
+            # CORRECCIÓN DE IMAGEN: Uso de Unsplash con parámetros de búsqueda precisos
+            img_url = f"https://source.unsplash.com/1200x500/?city,landscape,{urllib.parse.quote(destino)}"
+            # Alternativa si Unsplash falla:
+            st.markdown(f"""
+                <div style="width:100%; height:400px; border-radius:20px; overflow:hidden; margin-bottom:30px; box-shadow: 0 10px 20px rgba(0,0,0,0.1);">
+                    <img src="https://images.unsplash.com/photo-1502602898657-3e91760cbb34?auto=format&fit=crop&w=1200&q=80" style="width:100%; height:100%; object-fit:cover;" 
+                    onerror="this.src='https://loremflickr.com/1200/500/city,landscape,{urllib.parse.quote(destino)}'">
+                </div>
+            """, unsafe_allow_html=True)
             
             st.markdown(f'<div class="resenia-box"><h2>Sobre {destino}</h2><p>{guia.get("resenia")}</p></div>', unsafe_allow_html=True)
 
             # C. PUNTOS IMPERDIBLES
             st.subheader("📍 Lugares Recomendados")
             puntos = guia.get('puntos', [])
-            if isinstance(puntos, list):
-                for p in puntos:
-                    n_p = seguro(p.get('n'))
-                    # Links Oficiales de Google Maps y Tickets
-                    link_mapa = f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote(f'{n_p} {destino}')}"
-                    link_tkt = f"https://www.google.com/search?q=official+tickets+{urllib.parse.quote(f'{n_p} {destino}')}"
-                    
-                    st.markdown(f"""
-                    <div class="punto-card">
-                        <h3>{n_p}</h3>
-                        <p>{p.get('d', '')}</p>
-                        <small><b>⏰ Horario:</b> {p.get('h')} | <b>💰 Precio:</b> {p.get('p')}</small><br>
-                        <div style="margin-top:10px;">
-                            <a href="{link_mapa}" target="_blank" class="btn-action btn-primary">🗺️ VER MAPA</a>
-                            <a href="{link_tkt}" target="_blank" class="btn-action btn-secondary">🎟️ COMPRAR ENTRADAS</a>
-                        </div>
+            for p in puntos:
+                n_p = seguro(p.get('n'))
+                link_mapa = f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote(f'{n_p} {destino}')}"
+                link_tkt = f"https://www.google.com/search?q=official+tickets+{urllib.parse.quote(f'{n_p} {destino}')}"
+                st.markdown(f"""
+                <div class="punto-card">
+                    <h3>{n_p}</h3>
+                    <p>{p.get('d', '')}</p>
+                    <small><b>⏰ Horario:</b> {p.get('h')} | <b>💰 Precio:</b> {p.get('p')}</small><br>
+                    <div style="margin-top:10px;">
+                        <a href="{link_mapa}" target="_blank" class="btn-action btn-primary">🗺️ VER MAPA</a>
+                        <a href="{link_tkt}" target="_blank" class="btn-action btn-secondary">🎟️ COMPRAR ENTRADAS</a>
                     </div>
-                    """, unsafe_allow_html=True)
+                </div>
+                """, unsafe_allow_html=True)
 
-            # D. LOGÍSTICA COMPLETA CON REDIRECCIONES
+            # D. LOGÍSTICA
             st.markdown(f"""
             <div class="info-relevante-box">
                 <h2 style="color:white; margin-bottom:40px; text-align:center;">📊 Logística</h2>
