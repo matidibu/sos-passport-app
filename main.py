@@ -3,107 +3,173 @@ from groq import Groq
 from supabase import create_client
 import json
 import urllib.parse
-import time
+import re
 
-# 1. CONFIGURACIÓN
+# 1. ESTILO Y CONFIGURACIÓN (Tu fuente original)
 st.set_page_config(page_title="SOS Passport", page_icon="✈️", layout="wide")
 
-# 2. CONEXIÓN (Blindada)
-@st.cache_resource
-def conectar():
+def seguro(texto): 
+    if not texto or texto == "None": return "Información no disponible"
+    return str(texto).strip().title()
+
+# FUNCIÓN CRÍTICA: Limpia el ruido de la IA para que el JSON no falle
+def extraer_json(texto):
     try:
-        s = create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
-        g = Groq(api_key=st.secrets["GROQ_API_KEY"])
-        return s, g
-    except Exception as e:
-        st.error(f"Error de llaves: {e}")
-        return None, None
+        match = re.search(r'\{.*\}', texto, re.DOTALL)
+        return match.group(0) if match else texto
+    except:
+        return texto
 
-supabase, client = conectar()
+st.markdown("""
+    <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;800&display=swap');
+    .stApp { background: #f8fafc; font-family: 'Inter', sans-serif; }
+    .header-container {
+        background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+        padding: 50px 20px; border-radius: 0 0 30px 30px;
+        color: white; text-align: center; margin-bottom: 40px;
+    }
+    .resenia-box {
+        background: white; padding: 30px; border-radius: 20px; margin-bottom: 30px;
+        border-left: 10px solid #0ea5e9; box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+    }
+    .punto-card {
+        background: white; border-radius: 20px; padding: 25px; margin-bottom: 25px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.05); border-bottom: 5px solid #0ea5e9;
+    }
+    .info-relevante-box {
+        background: #0f172a; color: #f8fafc; padding: 50px; border-radius: 30px; margin-top: 50px;
+    }
+    .info-grid {
+        display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 35px;
+    }
+    .btn-action {
+        display: inline-block; padding: 10px 18px; border-radius: 8px;
+        text-decoration: none; font-size: 0.85rem; font-weight: 700;
+        margin-top: 15px; margin-right: 10px; text-align: center;
+    }
+    .btn-primary { background: #0ea5e9; color: white !important; }
+    .btn-secondary { background: #f59e0b; color: white !important; }
+    .btn-link { 
+        display: block; background: #1e293b; color: #38bdf8 !important; 
+        border: 1px solid #38bdf8; font-size: 0.75rem; padding: 8px; 
+        border-radius: 6px; text-decoration: none; text-align: center; margin-top: 10px;
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
-st.title("SOS PASSPORT ✈️")
+# 2. CONEXIONES
+try:
+    supabase = create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
+    client = Groq(api_key=st.secrets["GROQ_API_KEY"])
+except Exception as e:
+    st.error(f"Error de conexión: {e}")
+    st.stop()
 
-# 3. ENTRADAS
+st.markdown("""<div class="header-container"><h1>SOS PASSPORT ✈️</h1><p>Logística Global y Tickets Oficiales</p></div>""", unsafe_allow_html=True)
+
+# 3. INTERFAZ
 c1, c2, c3 = st.columns(3)
-with c1: nac = st.text_input("Nacionalidad", "Argentina")
-with c2: dest = st.text_input("Destino", placeholder="Ej: Madrid")
-with c3: lng = st.selectbox("Idioma", ["Español", "English", "Português"])
+with c1: nac_in = st.text_input("🌎 Nacionalidad", value="Argentina")
+with c2: dest_raw = st.text_input("📍 Ciudad de Destino", placeholder="Ej: Madrid")
+with c3: lang = st.selectbox("🗣️ Idioma", ["Español", "English", "Português", "Italiano"])
 
-if st.button("GENERAR GUÍA", use_container_width=True):
-    if not dest:
-        st.warning("Escribe un destino.")
+nacionalidad = seguro(nac_in)
+destino = seguro(dest_raw)
+
+if st.button("GENERAR LOGÍSTICA COMPLETA", use_container_width=True):
+    if not dest_raw:
+        st.warning("Por favor, ingresa un destino.")
     else:
-        search_key = f"{dest.lower()}-{nac.lower()}-{lng.lower()}"
+        search_key = f"{destino.lower()}-{nacionalidad.lower()}-{lang.lower()}"
         guia = None
-
-        # A. BUSCAR EN DB
-        if supabase:
-            try:
-                res = supabase.table("guias").select("datos_jsonb").eq("clave_busqueda", search_key).execute()
-                if res.data: guia = res.data[0]['datos_jsonb']
-            except: pass
-
-        # B. PEDIR A IA SI NO HAY CACHÉ
-        if not guia and client:
-            with st.spinner("La IA está preparando los datos..."):
+        
+        # Recuperar de Supabase
+        try:
+            res = supabase.table("guias").select("*").eq("clave_busqueda", search_key).execute()
+            if res.data: guia = res.data[0]['datos_jsonb']
+        except: pass
+        
+        # Generar con IA si no existe
+        if not guia:
+            with st.spinner("Conectando con servicios locales..."):
                 try:
-                    prompt = f"Genera un JSON para {nac} en {dest} ({lng}). Estructura EXACTA: {{\"resenia\":\"\", \"puntos\":[{{\"n\":\"nombre\",\"d\":\"desc\",\"h\":\"hora\",\"p\":\"precio\"}}], \"hospital\":\"\", \"cambio\":\"\", \"alojamiento\":\"\"}}"
-                    resp = client.chat.completions.create(
-                        messages=[{"role": "user", "content": prompt}],
-                        model="llama-3.3-70b-versatile",
-                        response_format={"type": "json_object"}
+                    prompt = f"""Genera un JSON para un viajero {nacionalidad} en {destino}. Idioma: {lang}. 
+                    JSON:
+                    {{
+                        "resenia": "Breve descripción",
+                        "puntos": [{{ "n": "Lugar", "d": "Info", "h": "Horas", "p": "Precio" }}],
+                        "cambio": "Datos casas cambio",
+                        "autos": "Rentadoras",
+                        "alojamiento": "Zonas Airbnb",
+                        "clima": "Pronóstico",
+                        "consulado": "Contacto",
+                        "hospital": "Salud"
+                    }}"""
+                    chat = client.chat.completions.create(
+                        messages=[{"role":"user","content":prompt}], 
+                        model="llama-3.3-70b-versatile", 
+                        response_format={"type":"json_object"}
                     )
-                    guia = json.loads(resp.choices[0].message.content)
-                    if supabase:
-                        supabase.table("guias").upsert({"clave_busqueda": search_key, "datos_jsonb": guia}).execute()
+                    
+                    # Limpiamos y cargamos el JSON
+                    contenido = extraer_json(chat.choices[0].message.content)
+                    guia = json.loads(contenido)
+                    
+                    # Guardar
+                    supabase.table("guias").upsert({"clave_busqueda": search_key, "datos_jsonb": guia}).execute()
                 except Exception as e:
-                    st.error(f"Error IA: {e}")
+                    st.error(f"Error al generar datos: {e}")
+                    st.stop()
 
-        # C. MOSTRAR RESULTADOS (A PRUEBA DE TODO)
         if guia:
-            # Foto principal (ahora con palabras clave más fuertes)
-            st.image(f"https://loremflickr.com/1200/450/{urllib.parse.quote(dest)},city,tourism/all", use_container_width=True)
+            # Foto Principal
+            st.image(f"https://loremflickr.com/1200/500/{urllib.parse.quote(destino)},city/all", use_container_width=True)
             
-            # 1. Reseña
-            st.header(f"Explorando {dest.title()}")
-            st.write(guia.get('resenia', 'Información general no disponible.'))
+            st.markdown(f'<div class="resenia-box"><h2>Sobre {destino}</h2><p>{guia.get("resenia", "Sin reseña.")}</p></div>', unsafe_allow_html=True)
 
-            # 2. Itinerario (Bucle protegido)
-            st.subheader("📍 Lugares Recomendados")
-            
-            # Intentamos encontrar la lista de puntos, se llame como se llame
-            lista_puntos = guia.get('puntos') or guia.get('itinerario') or guia.get('lugares') or []
-            
-            if lista_puntos:
-                for i, p in enumerate(lista_puntos[:6]): # Máximo 6 puntos
-                    with st.container(border=True):
-                        col_img, col_txt = st.columns([1, 2])
-                        nombre_lugar = p.get('n') or p.get('nombre') or "Lugar interesante"
-                        
-                        with col_img:
-                            # Foto mini del lugar
-                            st.image(f"https://loremflickr.com/400/300/{urllib.parse.quote(nombre_lugar)},{urllib.parse.quote(dest)}/all?lock={i}")
-                        
-                        with col_txt:
-                            st.subheader(nombre_lugar)
-                            st.write(p.get('d') or p.get('descripcion', ''))
-                            st.caption(f"⏰ {p.get('h', 'Consultar')} | 💰 {p.get('p', 'Variable')}")
-                            
-                            # Botones de acción
-                            q_map = urllib.parse.quote(f"{nombre_lugar} {dest}")
-                            st.link_button("🗺️ Mapa", f"https://www.google.com/maps/search/{q_map}")
+            # PUNTOS
+            st.subheader("📍 Itinerario Sugerido")
+            puntos = guia.get('puntos', [])
+            if isinstance(puntos, list):
+                for p in puntos:
+                    n_p = seguro(p.get('n'))
+                    link_mapa = f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote(f'{n_p} {destino}')}"
+                    link_tkt = f"https://www.google.com/search?q=official+tickets+{urllib.parse.quote(f'{n_p} {destino}')}"
+                    st.markdown(f"""
+                    <div class="punto-card">
+                        <h3>{n_p}</h3>
+                        <p>{p.get('d', '')}</p>
+                        <small><b>⏰ Horario:</b> {p.get('h', 'Verificar')} | <b>💰 Precio:</b> {p.get('p', 'Verificar')}</small><br>
+                        <a href="{link_mapa}" target="_blank" class="btn-action btn-primary">🗺️ MAPA</a>
+                        <a href="{link_tkt}" target="_blank" class="btn-action btn-secondary">🎟️ TICKETS</a>
+                    </div>
+                    """, unsafe_allow_html=True)
 
-            # 3. Logística
-            st.divider()
-            st.subheader("📊 Información de Logística")
-            col_a, col_b, col_c = st.columns(3)
-            
-            with col_a:
-                st.info(f"🏥 **Salud**\n\n{guia.get('hospital', 'Consultar centros locales')}")
-            with col_b:
-                st.warning(f"💰 **Dinero**\n\n{guia.get('cambio', 'Usar casas oficiales')}")
-            with col_c:
-                st.success(f"🏨 **Alojamiento**\n\n{guia.get('alojamiento', 'Info de zonas')}")
-
-        else:
-            st.error("No se recibió respuesta de la IA. Intenta de nuevo.")
+            # LOGÍSTICA
+            st.markdown(f"""
+            <div class="info-relevante-box">
+                <h2 style="color:white; margin-bottom:40px; text-align:center;">📊 Logística</h2>
+                <div class="info-grid">
+                    <div class="info-item">
+                        <h4 style="color:#38bdf8;">🏨 Alojamiento</h4>
+                        <p>{guia.get('alojamiento', 'Consultar Airbnb')}</p>
+                        <a href="https://www.airbnb.com/s/{urllib.parse.quote(destino)}/homes" target="_blank" class="btn-link">🔗 IR A AIRBNB</a>
+                    </div>
+                    <div class="info-item">
+                        <h4 style="color:#38bdf8;">💰 Casas de Cambio</h4>
+                        <p>{guia.get('cambio', 'Consultar mapas')}</p>
+                        <a href="https://www.google.com/maps/search/currency+exchange+{urllib.parse.quote(destino)}" target="_blank" class="btn-link">🔗 VER UBICACIONES</a>
+                    </div>
+                    <div class="info-item">
+                        <h4 style="color:#38bdf8;">🏥 Salud</h4>
+                        <p>{guia.get('hospital', 'Consultar centros')}</p>
+                        <a href="https://www.google.com/maps/search/hospital+{urllib.parse.quote(destino)}" target="_blank" class="btn-link">🔗 HOSPITALES CERCA</a>
+                    </div>
+                    <div class="info-item">
+                        <h4 style="color:#38bdf8;">🏛️ Consulado</h4>
+                        <p>{guia.get('consulado', 'Consultar')}</p>
+                    </div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
