@@ -3,7 +3,7 @@ from groq import Groq
 from supabase import create_client, Client
 import json
 import urllib.parse
-import time
+import re
 
 # 1. ESTILO Y CONFIGURACIÓN
 st.set_page_config(page_title="SOS Passport", page_icon="✈️", layout="wide")
@@ -128,14 +128,11 @@ if st.button("GENERAR LOGÍSTICA COMPLETA", use_container_width=True):
                     st.stop()
 
         if guia:
-            # MEJORA DE IMAGEN: Foto paisaje de la ciudad con semilla aleatoria para evitar que se clave
-            seed = int(time.time())
-            img_url = f"https://loremflickr.com/1200/500/landscape,city,{urllib.parse.quote(destino)}/all?lock={seed}"
-            st.image(img_url, use_container_width=True, caption=f"Paisaje de la ciudad de {destino}")
+            st.image(f"https://loremflickr.com/1200/500/{urllib.parse.quote(destino)},city/all", use_container_width=True)
             
             st.markdown(f'<div class="resenia-box"><h2>Sobre {destino}</h2><p>{guia.get("resenia", "Sin reseña.")}</p></div>', unsafe_allow_html=True)
 
-            # C. PUNTOS
+            # C. PUNTOS (Con validación de lista)
             st.subheader("📍 Itinerario Sugerido")
             puntos = guia.get('puntos', [])
             if isinstance(puntos, list):
@@ -160,32 +157,32 @@ if st.button("GENERAR LOGÍSTICA COMPLETA", use_container_width=True):
                 <div class="info-grid">
                     <div class="info-item">
                         <h4>🏨 Alojamiento</h4>
-                        <p>{guia.get('alojamiento', 'Consultar barrios recomendados.')}</p>
+                        <p>{guia.get('alojamiento', 'Consultar Airbnb')}</p>
                         <a href="https://www.airbnb.com/s/{urllib.parse.quote(destino)}/homes" target="_blank" class="btn-link">🔗 IR A AIRBNB</a>
                     </div>
                     <div class="info-item">
                         <h4>🚗 Renta de Autos</h4>
-                        <p>{guia.get('autos', 'Consultar rentadoras locales.')}</p>
+                        <p>{guia.get('autos', 'Consultar Rentadoras')}</p>
                         <a href="https://www.rentalcars.com/search-results?locationName={urllib.parse.quote(destino)}" target="_blank" class="btn-link">🔗 BUSCAR RENTADORAS</a>
                     </div>
                     <div class="info-item">
                         <h4>💰 Casas de Cambio</h4>
-                        <p>{guia.get('cambio', 'Consultar zonas seguras de cambio.')}</p>
+                        <p>{guia.get('cambio', 'Consultar mapas')}</p>
                         <a href="https://www.google.com/maps/search/currency+exchange+{urllib.parse.quote(destino)}" target="_blank" class="btn-link">🔗 VER UBICACIONES</a>
                     </div>
                     <div class="info-item">
                         <h4>☀️ Clima</h4>
-                        <p>{guia.get('clima', 'Consultar pronóstico extendido.')}</p>
+                        <p>{guia.get('clima', 'Consultar pronóstico')}</p>
                         <a href="https://www.google.com/search?q=weather+{urllib.parse.quote(destino)}" target="_blank" class="btn-link">🔗 VER DETALLE</a>
                     </div>
                     <div class="info-item">
                         <h4>🏛️ Consulado</h4>
-                        <p>{guia.get('consulado', 'Consultar datos de contacto.')}</p>
+                        <p>{guia.get('consulado', 'Consultar cancillería')}</p>
                         <a href="https://www.google.com/search?q=consulado+{urllib.parse.quote(nacionalidad)}+en+{urllib.parse.quote(destino)}" target="_blank" class="btn-link">🔗 WEB OFICIAL</a>
                     </div>
                     <div class="info-item">
                         <h4>🏥 Salud</h4>
-                        <p>{guia.get('hospital', 'Consultar centros de salud cercanos.')}</p>
+                        <p>{guia.get('hospital', 'Consultar centros')}</p>
                         <a href="https://www.google.com/maps/search/hospital+{urllib.parse.quote(destino)}" target="_blank" class="btn-link">🔗 HOSPITALES CERCA</a>
                     </div>
                 </div>
