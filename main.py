@@ -29,6 +29,11 @@ st.markdown(f"""
         border-radius: 20px; margin-top: 40px; border-top: 8px solid #ff9800;
     }}
     .currency-val {{ color: #00e5ff; font-weight: 800; font-size: 1.5rem; }}
+    .disclaimer {{
+        margin-top: 30px; padding: 15px; border-radius: 10px;
+        background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1);
+        font-size: 0.85rem; color: #b0bec5; line-height: 1.4;
+    }}
     .btn-action {{
         display: inline-block; padding: 12px 20px; border-radius: 10px;
         text-decoration: none; font-weight: 700; margin-top: 15px; margin-right: 10px; text-align: center;
@@ -46,7 +51,7 @@ except:
     st.error("Error en las credenciales (Secrets).")
     st.stop()
 
-st.markdown('<div class="header-container"><h1>SOS Passport 🏖️</h1><p>Tu guía de viaje inteligente y precisa</p></div>', unsafe_allow_html=True)
+st.markdown('<div class="header-container"><h1>SOS Passport 🏖️</h1><p>Tu compañero de viaje inteligente</p></div>', unsafe_allow_html=True)
 
 # 3. INTERFAZ
 c1, c2, c3 = st.columns(3)
@@ -60,34 +65,26 @@ if st.button("¡EXPLORAR MI DESTINO!", use_container_width=True):
         search_key = f"{dest_input.lower().strip()}-{nac.lower().strip()}-{lang.lower()}"
         guia = None
         
-        # Intentar recuperar de Supabase
         try:
             res = supabase.table("guias").select("*").eq("clave_busqueda", search_key).execute()
             if res.data: guia = res.data[0]['datos_jsonb']
         except: pass
         
         if not guia:
-            with st.spinner(f"Analizando {dest_input}..."):
-                # PROMPT ULTRADETALLADO
-                prompt = f"""Genera un JSON estrictamente válido para un viajero de nacionalidad {nac} que visita la ciudad de {dest_input}. Idioma: {lang}.
-                INSTRUCCIONES FINANCIERAS:
-                1. Identifica el país de {dest_input} y su moneda oficial.
-                2. Identifica la moneda oficial de {nac}.
-                3. Proporciona el tipo de cambio de AMBAS monedas frente al Dólar Estadounidense (USD).
-                
+            with st.spinner(f"Sincronizando datos de {dest_input}..."):
+                prompt = f"""Genera un JSON para un viajero de nacionalidad {nac} que visita {dest_input}. Idioma: {lang}.
+                INSTRUCCIONES: Identifica monedas oficiales de ambos países y cambio vs USD.
                 ESTRUCTURA JSON:
                 {{
-                    "resenia_ciudad": "Texto descriptivo sin títulos",
-                    "puntos_imperdibles": [
-                        {{ "nombre": "Nombre", "descripcion": "Info sin la palabra descripcion", "horario": "Solo horas", "precio": "Solo valor", "url": "url" }}
-                    ],
-                    "moneda_destino_nombre": "Nombre de la moneda oficial del destino",
-                    "cambio_destino_usd": "Valor de 1 USD en esa moneda",
-                    "moneda_usuario_nombre": "Nombre de la moneda oficial de {nac}",
-                    "cambio_usuario_usd": "Valor de 1 USD en esa moneda",
-                    "pronostico_7_dias": "Resumen del clima",
-                    "datos_consulado": "Dirección y contacto",
-                    "datos_hospital": "Nombre y dirección"
+                    "resenia_ciudad": "Texto descriptivo",
+                    "puntos_imperdibles": [{{ "nombre": "Nombre", "descripcion": "Info", "horario": "Horas", "precio": "Valor", "url": "url" }}],
+                    "moneda_destino_nombre": "Moneda local",
+                    "cambio_destino_usd": "1 USD = ?",
+                    "moneda_usuario_nombre": "Tu moneda",
+                    "cambio_usuario_usd": "1 USD = ?",
+                    "pronostico_7_dias": "Clima",
+                    "datos_consulado": "Contacto",
+                    "datos_hospital": "Dirección"
                 }}"""
                 
                 chat = client.chat.completions.create(
@@ -106,22 +103,22 @@ if st.button("¡EXPLORAR MI DESTINO!", use_container_width=True):
             # B. RESEÑA
             st.markdown(f'<div class="resenia-box"><h2>Sobre {dest_input}</h2><p>{guia.get("resenia_ciudad")}</p></div>', unsafe_allow_html=True)
 
-            # C. PUNTOS IMPERDIBLES
+            # C. PUNTOS
             st.subheader("📍 Lugares que no te puedes perder")
             for p in guia.get('puntos_imperdibles', []):
                 nombre_p = p.get('nombre', 'Lugar')
-                desc_p = str(p.get('descripcion', '')).replace('Descripción:', '').replace('descripcion:', '')
+                desc_clean = str(p.get('descripcion', '')).replace('Descripción:', '').replace('descripcion:', '')
                 st.markdown(f"""
                 <div class="punto-card">
                     <h3>{nombre_p}</h3>
-                    <p>{desc_p}</p>
+                    <p>{desc_clean}</p>
                     <small><b>⏰ Horario:</b> {p.get('horario')} | <b>💰 Precio:</b> {p.get('precio')}</small><br>
                     <a href="https://www.google.com/maps/search/?api=1&query={urllib.parse.quote(nombre_p + ' ' + dest_input)}" target="_blank" class="btn-action btn-map">🗺️ MAPA</a>
                     <a href="https://www.google.com/search?q=tickets+official+{urllib.parse.quote(nombre_p)}" target="_blank" class="btn-action btn-tkt">🎟️ TICKETS</a>
                 </div>
                 """, unsafe_allow_html=True)
 
-            # D. INFORMACIÓN RELEVANTE (ABAJO DE TODO)
+            # D. INFORMACIÓN RELEVANTE + DISCLAIMER
             st.markdown(f"""
             <div class="info-relevante-box">
                 <h2 style="color:#00acc1; margin-bottom:30px;">📊 Información Relevante</h2>
@@ -135,15 +132,18 @@ if st.button("¡EXPLORAR MI DESTINO!", use_container_width=True):
                         <p class="currency-val">1 USD = {guia.get('cambio_usuario_usd')}</p>
                     </div>
                     <div>
-                        <h4 style="color:#ff9800;">☀️ Clima (Próximos 7 días)</h4>
+                        <h4 style="color:#ff9800;">☀️ Clima (7 días)</h4>
                         <p>{guia.get('pronostico_7_dias')}</p>
                     </div>
                     <div>
                         <h4 style="color:#ff9800;">🏛️ Seguridad y Salud</h4>
                         <p><b>Consulado:</b><br>{guia.get('datos_consulado')}</p>
-                        <br>
-                        <p><b>Hospital:</b><br>{guia.get('datos_hospital')}</p>
+                        <p style="margin-top:10px;"><b>Hospital:</b><br>{guia.get('datos_hospital')}</p>
                     </div>
+                </div>
+                <div class="disclaimer">
+                    <b>Nota sobre la información:</b> Los datos financieros, climáticos y de contacto son obtenidos de fuentes públicas y modelos predictivos globales (como Google Finance y OpenWeather). <br><br>
+                    <i>SOS Passport brinda esta información con fines informativos y recreativos. No nos hacemos responsables por inexactitudes, cambios de último momento o decisiones tomadas basadas en estos datos. Recomendamos siempre verificar información crítica en fuentes oficiales antes de viajar.</i>
                 </div>
             </div>
             """, unsafe_allow_html=True)
